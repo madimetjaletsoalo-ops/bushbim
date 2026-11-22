@@ -10,17 +10,19 @@ type Props = {
   resetOnSuccess?: boolean;
   /** data-testid for e2e tests */
   testId?: string;
+  /** lets inputs elsewhere on the page join this form via their `form` attribute */
+  id?: string;
 };
 
 /** A form bound to a server action that shows the result message inline. */
-export function ActionForm({ action, children, className, resetOnSuccess = true, testId }: Props) {
+export function ActionForm({ action, children, className, resetOnSuccess = true, testId, id }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok && resetOnSuccess) ref.current?.reset();
   }, [state, resetOnSuccess]);
   return (
-    <form ref={ref} action={formAction} className={className} data-testid={testId} aria-busy={pending}>
+    <form ref={ref} id={id} action={formAction} className={className} data-testid={testId} aria-busy={pending}>
       <fieldset disabled={pending} className="contents">
         {children}
       </fieldset>

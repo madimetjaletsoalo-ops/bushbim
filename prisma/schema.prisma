@@ -103,6 +103,9 @@ model Project {
   auditEvents AuditEvent[]
   folders     Folder[]
   documents   Document[]
+  sheets      Sheet[]
+  sheetSets   SheetSet[]
+  titleBlock  TitleBlockSettings?
 
   @@unique([accountId, name])
 }
@@ -260,6 +263,7 @@ model DocumentVersion {
   createdAt    DateTime @default(now())
   markups      Markup[]
   calibrations SheetCalibration[]
+  sheets       Sheet[]
 
   @@unique([documentId, number])
 }
@@ -347,4 +351,56 @@ model SheetCalibration {
   updatedAt     DateTime        @updatedAt
 
   @@unique([versionId, page])
+}
+
+/// One page of a PDF (or an image) uploaded under Plans. Each version gets its own sheets.
+model Sheet {
+  id        String          @id @default(cuid())
+  projectId String
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId String
+  version   DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  page      Int
+  number    String
+  title     String
+  /// true once someone edits the number or title; re-reading the title block then leaves it alone
+  edited    Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  sets      SetSheet[]
+
+  @@unique([versionId, page])
+  @@index([projectId, number])
+}
+
+/// A named group of sheet versions, e.g. "Tender" or "IFC Rev B".
+model SheetSet {
+  id        String     @id @default(cuid())
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime   @default(now())
+  sheets    SetSheet[]
+
+  @@unique([projectId, name])
+}
+
+model SetSheet {
+  setId   String
+  set     SheetSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  sheetId String
+  sheet   Sheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  addedAt DateTime @default(now())
+
+  @@id([setId, sheetId])
+}
+
+/// Where the sheet number and title sit on this project's drawings:
+/// {x, y, w, h} as fractions of the page, origin top-left.
+model TitleBlockSettings {
+  projectId    String   @id
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  numberRegion Json
+  titleRegion  Json
+  updatedAt    DateTime @updatedAt
 }

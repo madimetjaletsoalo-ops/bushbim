@@ -9,6 +9,12 @@ BushBIM is a construction collaboration platform for African luxury resort devel
 4. Before committing, all of these must pass: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run e2e`. Add unit tests for pure logic and extend the Playwright spec (or add one) for the new workflow.
 5. Tick the item in `BACKLOG.md` with the date and a one-line note, update the README status table, and commit with a clear message.
 
+### Delivery: one PR per night
+- Choosing a base: list open PRs into `main` whose titles start with `Nightly:`. If one is still unmerged, branch from the newest one (stacked), and skip any item already covered by an open nightly PR. Otherwise branch from `main`.
+- Push to the session's designated branch and open a PR into `main` titled `Nightly: <n>. <item title>`. The body covers what was built, the results of each check, and `Depends on <PR link>` when stacked.
+- If the item can't be finished, or checks fail and can't be fixed, open a **draft** PR that explains the blocker, and leave the item unticked.
+- One item per night. Never merge, force-push, or skip or disable tests. The product owner reviews and merges.
+
 ## Local setup in a fresh container
 - Postgres: `service postgresql start`, then create the user/db `bushbim`/`bushbim` (see `.env.example`), or run `docker compose up -d`.
 - e2e: `CHROMIUM_PATH=/opt/pw-browsers/chromium npm run e2e` when a preinstalled Chromium exists.

@@ -5,8 +5,15 @@ import { getDocsContext } from "@/modules/docs/access";
 import { levelAtLeast } from "@/modules/docs/folder-permissions";
 import { isImage, isViewable, visibleTo, type Pt } from "@/modules/docs/markup";
 
-export default async function ViewerPage({ params }: { params: Promise<{ projectId: string; versionId: string }> }) {
+export default async function ViewerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string; versionId: string }>;
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { projectId, versionId } = await params;
+  const initialPage = Math.max(1, parseInt((await searchParams).page ?? "1", 10) || 1);
   const ctx = await getDocsContext(projectId);
   const v = await db.documentVersion.findFirst({
     where: { id: versionId, document: { projectId } },
@@ -31,6 +38,8 @@ export default async function ViewerPage({ params }: { params: Promise<{ project
     authorName: m.author?.name ?? "Former member",
   }));
   const api = `/api/projects/${projectId}/versions/${versionId}`;
+  // previous version, for "Compare with V(n-1)"
+  const prev = v.document.versions.find((x) => x.number === v.number - 1) ?? null;
   return (
     <Viewer
       projectId={projectId}
@@ -48,6 +57,8 @@ export default async function ViewerPage({ params }: { params: Promise<{ project
       canManage={levelAtLeast(level, "MANAGE")}
       initialMarkups={markups}
       initialScales={v.calibrations.map((c) => ({ page: c.page, unitsPerPoint: c.unitsPerPoint, unit: c.unit }))}
+      initialPage={initialPage}
+      compareBase={prev ? `/projects/${projectId}/compare?a=${prev.id}&b=${versionId}` : null}
     />
   );
 }

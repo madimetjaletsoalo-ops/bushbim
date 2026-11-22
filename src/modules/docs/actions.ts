@@ -11,6 +11,7 @@ import type { ActionState } from "@/modules/admin/types";
 import { MAX_FILES_PER_UPLOAD, MAX_UPLOAD_BYTES, checkName, nameKey, storageKey, subtreeIds, versionLabel } from "./logic";
 import { secretBytes, signToken, uploadClaims, verifyToken } from "./token";
 import { folderAccess } from "./access";
+import { syncSheetsForVersion } from "./sheets-server";
 import { DEFAULT_SUBJECT_ID, FOLDER_LEVELS, FOLDER_LEVEL_LABELS, buildIndex, folderLevel, levelAtLeast, type FolderGrant } from "./folder-permissions";
 
 const UPLOAD_TOKEN_TTL = 60 * 60;
@@ -185,7 +186,7 @@ export async function completeUpload(projectId: string, token: string): Promise<
         : await tx.document.create({
             data: { projectId, folderId: c.fid, name: c.name, nameKey: key, currentVersion: 1, size: c.size, contentType: c.ct },
           });
-      await tx.documentVersion.create({
+      const version = await tx.documentVersion.create({
         data: { documentId: doc.id, number: doc.currentVersion, storageKey: c.key, fileName: c.name, size: c.size, contentType: c.ct, uploadedById: ctx.user.id },
       });
       await tx.auditEvent.create({
@@ -196,7 +197,7 @@ export async function completeUpload(projectId: string, token: string): Promise<
           details: { documentId: doc.id, name: doc.name, version: versionLabel(doc.currentVersion), size: c.size },
         },
       });
-      return doc;
+      return { ...doc, versionId: version.id };
     });
 
   let doc;
@@ -206,6 +207,12 @@ export async function completeUpload(projectId: string, token: string): Promise<
     // two uploads of a new name at once: the second retries and stacks
     if (!isUniqueViolation(e)) throw e;
     doc = await save();
+  }
+  // PDFs and images under Plans become sheets (number and title read from the title block)
+  try {
+    await syncSheetsForVersion(projectId, doc.versionId);
+  } catch (e) {
+    console.error("sheets: failed for", doc.name, e);
   }
   revalidateDocs(projectId);
   return { ok: true, name: doc.name, version: doc.currentVersion };

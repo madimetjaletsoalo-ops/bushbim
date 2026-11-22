@@ -49,6 +49,9 @@ interface Props {
   canManage: boolean;
   initialMarkups: MarkupDTO[];
   initialScales: Scale[];
+  initialPage?: number;
+  /** compare page for the previous version; the current page numbers are appended */
+  compareBase?: string | null;
 }
 
 export function Viewer(p: Props) {
@@ -59,7 +62,7 @@ export function Viewer(p: Props) {
   const renderRef = useRef<{ cancel(): void } | null>(null);
 
   const [numPages, setNumPages] = useState(1);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(p.initialPage ?? 1);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [fitted, setFitted] = useState(false);
@@ -100,6 +103,7 @@ export function Viewer(p: Props) {
         if (cancelled) return void doc.destroy();
         docRef.current = doc;
         setNumPages(doc.numPages);
+        setPage((pg) => Math.min(pg, doc.numPages));
       } catch (e) {
         console.error(e);
         if (!cancelled) setLoadError("This file couldn't be opened in the viewer.");
@@ -356,6 +360,9 @@ export function Viewer(p: Props) {
             <button type="button" className={btnGhost} onClick={() => setZoom((z) => Math.min(8, +(z * 1.25).toFixed(3)))} aria-label="Zoom in">+</button>
             <button type="button" className={btnGhost} onClick={() => size && wrapRef.current && setZoom((wrapRef.current.clientWidth - 16) / size.w)}>Fit</button>
           </div>
+          {p.compareBase && (
+            <a href={`${p.compareBase}&pa=${page}&pb=${page}`} className={btnGhost}>Compare with V{p.versionNumber - 1}</a>
+          )}
           {p.exportHref && (
             <a href={p.exportHref} className={btnGhost}>Export PDF</a>
           )}

@@ -45,6 +45,8 @@ model User {
   createdAt    DateTime        @default(now())
   memberships  ProjectMember[]
   auditEvents  AuditEvent[]
+  folders      Folder[]
+  versions     DocumentVersion[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -95,6 +97,8 @@ model Project {
   members     ProjectMember[]
   permissions ServicePermission[]
   auditEvents AuditEvent[]
+  folders     Folder[]
+  documents   Document[]
 
   @@unique([accountId, name])
 }
@@ -182,4 +186,73 @@ model AuditEvent {
   createdAt DateTime @default(now())
 
   @@index([projectId, createdAt])
+}
+
+// ---------- Document Control ----------
+
+/// The two top-level folders every project starts with.
+enum FolderRoot {
+  PLANS
+  PROJECT_FILES
+}
+
+/// A folder in a project's document tree. Root folders have `root` set and no parent.
+model Folder {
+  id          String      @id @default(cuid())
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Folder?     @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[]    @relation("FolderTree")
+  root        FolderRoot?
+  name        String
+  createdById String?
+  createdBy   User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  documents   Document[]
+
+  @@unique([projectId, root])
+  @@unique([parentId, name])
+  @@index([projectId])
+}
+
+/// A named file in a folder. Uploading the same name again stacks a new version.
+model Document {
+  id              String            @id @default(cuid())
+  projectId       String
+  project         Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folderId        String
+  folder          Folder            @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  name            String
+  /// lower-cased name: "Site Plan.pdf" and "site plan.PDF" stack as one document
+  nameKey         String
+  /// latest version number and its size/type, kept here for listing and sorting
+  currentVersion  Int               @default(1)
+  size            Int               @default(0)
+  contentType     String            @default("application/octet-stream")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @default(now())
+  versions        DocumentVersion[]
+
+  @@unique([folderId, nameKey])
+  @@index([projectId])
+}
+
+model DocumentVersion {
+  id           String   @id @default(cuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  number       Int
+  /// object key in S3/MinIO (or the local storage directory)
+  storageKey   String   @unique
+  /// file name as uploaded for this version
+  fileName     String
+  size         Int
+  contentType  String
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@unique([documentId, number])
 }

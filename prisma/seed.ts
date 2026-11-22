@@ -2,6 +2,7 @@
 // Login: admin@bushbim.test / bushbim123
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { ensureRootFolders } from "../src/modules/docs/roots";
 
 const db = new PrismaClient();
 
@@ -41,6 +42,7 @@ async function main() {
     { email: "tumi@lowveld.test", name: "Tumi Mahlangu", company: 3, role: 4, services: ["DOCS", "ISSUES", "CHECKLISTS"] },
   ] as const;
   const klv = projects[0];
+  for (const p of projects) await ensureRootFolders(db, p.id, admin.id);
   await db.projectMember.create({
     data: { projectId: klv.id, userId: admin.id, accessLevel: "PROJECT_ADMIN", status: "ACTIVE", companyId: companies[0].id, services: ["DOCS", "ISSUES", "CHECKLISTS", "DAILY_LOGS"], roles: { create: { roleId: roles[0].id } } },
   });

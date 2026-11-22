@@ -10,6 +10,7 @@ import { createSession, destroySession } from "@/lib/session";
 import { requireAccountAdmin, requireProjectAdmin } from "@/lib/auth";
 import { LEVELS, SERVICES } from "@/lib/permissions";
 import { parseInviteCsv } from "@/lib/csv";
+import { ensureRootFolders } from "@/modules/docs/roots";
 import { upsertMember } from "./members";
 import type { ActionState } from "./types";
 
@@ -155,6 +156,7 @@ export async function createProject(_: ActionState, form: FormData): Promise<Act
     await tx.projectMember.create({
       data: { projectId: p.id, userId: user.id, accessLevel: "PROJECT_ADMIN", status: "ACTIVE", services: [...SERVICES] },
     });
+    await ensureRootFolders(tx, p.id, user.id);
     await audit(tx, user.id, p.id, "project.created", { name: p.name });
     return p;
   });

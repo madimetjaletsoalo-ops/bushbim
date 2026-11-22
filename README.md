@@ -9,7 +9,8 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Module | State |
 | --- | --- |
 | Project Admin: projects, members, companies, roles, service permissions, activity log, CSV bulk invite, **add one person to many projects at once** | ✅ Built |
-| Document Control | Backlog items 1–4, 7–8 |
+| Document Control: Plans / Project Files folders, subfolders, multi-file upload with progress, automatic versioning (V2, V3…), version history with downloads, list/grid views with sorting | ✅ Built (item 1) |
+| Document Control: folder permissions, viewer and markups, sheets and sets, reviews, transmittals | Backlog items 2–4, 7–8 |
 | Field Management (issues, checklists, daily logs) | Backlog items 5–6, 9–10 |
 
 ## Stack
@@ -45,7 +46,9 @@ prisma/schema.prisma        data model
 src/lib/permissions.ts      single permission model (can / effectiveLevel), pure + unit tested
 src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
+src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/docs/           Document Control: server actions, pure folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
 src/app/(app)/projects/[projectId]/{admin,docs,field}/   modules
 ```
@@ -55,6 +58,8 @@ src/app/(app)/projects/[projectId]/{admin,docs,field}/   modules
 - **Account admin**: owns the organisation, creates projects, and can add people across projects.
 - **Project admin**: full control of one project. Has Manager level on every service.
 - **Project member**: can open only the services enabled for them (Document Control, Issues, Checklists, Daily Logs). On each one they are a Viewer unless a grant to their user, role or company raises them to Creator or Manager. The highest applicable grant wins.
+
+In Document Control, Viewers browse and download, Creators also upload files and create folders, and Managers also rename and delete folders. The Plans and Project Files roots can't be renamed or deleted. Folder-level permissions arrive with backlog item 2.
 
 Every module checks access through `can(member, service, action, grants)` in `src/lib/permissions.ts`.
 
@@ -69,4 +74,8 @@ Every module checks access through `can(member, service, action, grants)` in `sr
    - `DIRECT_URL`: the session/direct URL
    - `SESSION_SECRET`: 32+ random characters
    - optional `SEED_DEMO=1`: loads the demo organisation (login `admin@bushbim.test` / `bushbim123`). Remove it, and change that password, before real use.
-3. Deploy. The `vercel-build` script runs `prisma migrate deploy` before `next build`, so the database schema is always up to date.
+3. File storage for Document Control (required on Vercel, which has no persistent disk). Any S3-compatible bucket works, including Supabase Storage (Project Settings → Storage → S3 connection):
+   - `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
+   - `S3_ENDPOINT` for non-AWS providers (e.g. `https://<ref>.supabase.co/storage/v1/s3`); path-style addressing is then used automatically
+   - The bucket must allow CORS `PUT` and `GET` from the app's origin with the `Content-Type` header, because browsers upload straight to the bucket.
+4. Deploy. The `vercel-build` script runs `prisma migrate deploy` before `next build`, so the database schema is always up to date.

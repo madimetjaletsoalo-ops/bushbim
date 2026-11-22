@@ -6,9 +6,13 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// DATABASE_URL: runtime connection (on Supabase, the pooled port 6543 URL with ?pgbouncer=true).
+// DIRECT_URL: direct connection used by migrations (on Supabase, the session/direct port 5432 URL).
+// Locally both point at the same database.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 /// A customer organisation (e.g. the resort developer). Owns companies, roles and projects.

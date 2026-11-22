@@ -12,7 +12,8 @@
     "e2e": "playwright test",
     "seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma generate && prisma migrate deploy && if [ \"$SEED_DEMO\" = \"1\" ]; then tsx prisma/seed.ts; fi && next build"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

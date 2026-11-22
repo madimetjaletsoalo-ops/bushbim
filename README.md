@@ -57,3 +57,16 @@ src/app/(app)/projects/[projectId]/{admin,docs,field}/   modules
 - **Project member**: can open only the services enabled for them (Document Control, Issues, Checklists, Daily Logs). On each one they are a Viewer unless a grant to their user, role or company raises them to Creator or Manager. The highest applicable grant wins.
 
 Every module checks access through `can(member, service, action, grants)` in `src/lib/permissions.ts`.
+
+## Deploying (Vercel + Supabase)
+
+1. In Supabase, open **Connect** and copy two connection strings:
+   - **Transaction pooler** (port 6543). Add `?pgbouncer=true&connection_limit=1&schema=bushbim` to the end.
+   - **Session pooler / direct** (port 5432). Add `?schema=bushbim` to the end.
+   The `bushbim` schema keeps BushBIM's tables apart from anything else in the database.
+2. In the Vercel project, open **Settings → Environment Variables** and add:
+   - `DATABASE_URL`: the transaction-pooler URL
+   - `DIRECT_URL`: the session/direct URL
+   - `SESSION_SECRET`: 32+ random characters
+   - optional `SEED_DEMO=1`: loads the demo organisation (login `admin@bushbim.test` / `bushbim123`). Remove it, and change that password, before real use.
+3. Deploy. The `vercel-build` script runs `prisma migrate deploy` before `next build`, so the database schema is always up to date.

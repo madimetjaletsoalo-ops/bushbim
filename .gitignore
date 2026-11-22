@@ -44,3 +44,6 @@ next-env.d.ts
 # playwright
 /test-results/
 /playwright-report/
+
+# local document storage (when S3_BUCKET is not set)
+/.storage/

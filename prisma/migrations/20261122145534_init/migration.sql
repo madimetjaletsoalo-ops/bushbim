@@ -1,26 +1,26 @@
 -- CreateEnum
-CREATE TYPE "public"."AccountRole" AS ENUM ('ACCOUNT_ADMIN', 'USER');
+CREATE TYPE "AccountRole" AS ENUM ('ACCOUNT_ADMIN', 'USER');
 
 -- CreateEnum
-CREATE TYPE "public"."ProjectStatus" AS ENUM ('ACTIVE', 'ARCHIVED');
+CREATE TYPE "ProjectStatus" AS ENUM ('ACTIVE', 'ARCHIVED');
 
 -- CreateEnum
-CREATE TYPE "public"."AccessLevel" AS ENUM ('PROJECT_ADMIN', 'MEMBER');
+CREATE TYPE "AccessLevel" AS ENUM ('PROJECT_ADMIN', 'MEMBER');
 
 -- CreateEnum
-CREATE TYPE "public"."MemberStatus" AS ENUM ('INVITED', 'ACTIVE');
+CREATE TYPE "MemberStatus" AS ENUM ('INVITED', 'ACTIVE');
 
 -- CreateEnum
-CREATE TYPE "public"."Service" AS ENUM ('DOCS', 'ISSUES', 'CHECKLISTS', 'DAILY_LOGS');
+CREATE TYPE "Service" AS ENUM ('DOCS', 'ISSUES', 'CHECKLISTS', 'DAILY_LOGS');
 
 -- CreateEnum
-CREATE TYPE "public"."SubjectType" AS ENUM ('USER', 'ROLE', 'COMPANY');
+CREATE TYPE "SubjectType" AS ENUM ('USER', 'ROLE', 'COMPANY');
 
 -- CreateEnum
-CREATE TYPE "public"."PermissionLevel" AS ENUM ('NONE', 'VIEWER', 'CREATOR', 'MANAGER');
+CREATE TYPE "PermissionLevel" AS ENUM ('NONE', 'VIEWER', 'CREATOR', 'MANAGER');
 
 -- CreateTable
-CREATE TABLE "public"."Account" (
+CREATE TABLE "Account" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -29,21 +29,21 @@ CREATE TABLE "public"."Account" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."User" (
+CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "passwordHash" TEXT,
     "inviteToken" TEXT,
     "accountId" TEXT NOT NULL,
-    "accountRole" "public"."AccountRole" NOT NULL DEFAULT 'USER',
+    "accountRole" "AccountRole" NOT NULL DEFAULT 'USER',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "public"."Company" (
+CREATE TABLE "Company" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -55,7 +55,7 @@ CREATE TABLE "public"."Company" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Role" (
+CREATE TABLE "Role" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -65,7 +65,7 @@ CREATE TABLE "public"."Role" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Project" (
+CREATE TABLE "Project" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -77,28 +77,28 @@ CREATE TABLE "public"."Project" (
     "timezone" TEXT NOT NULL DEFAULT 'Africa/Johannesburg',
     "startDate" TIMESTAMP(3),
     "endDate" TIMESTAMP(3),
-    "status" "public"."ProjectStatus" NOT NULL DEFAULT 'ACTIVE',
+    "status" "ProjectStatus" NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "public"."ProjectMember" (
+CREATE TABLE "ProjectMember" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "companyId" TEXT,
-    "accessLevel" "public"."AccessLevel" NOT NULL DEFAULT 'MEMBER',
-    "status" "public"."MemberStatus" NOT NULL DEFAULT 'INVITED',
-    "services" "public"."Service"[],
+    "accessLevel" "AccessLevel" NOT NULL DEFAULT 'MEMBER',
+    "status" "MemberStatus" NOT NULL DEFAULT 'INVITED',
+    "services" "Service"[],
     "addedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ProjectMember_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "public"."MemberRole" (
+CREATE TABLE "MemberRole" (
     "memberId" TEXT NOT NULL,
     "roleId" TEXT NOT NULL,
 
@@ -106,19 +106,19 @@ CREATE TABLE "public"."MemberRole" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."ServicePermission" (
+CREATE TABLE "ServicePermission" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
-    "service" "public"."Service" NOT NULL,
-    "subjectType" "public"."SubjectType" NOT NULL,
+    "service" "Service" NOT NULL,
+    "subjectType" "SubjectType" NOT NULL,
     "subjectId" TEXT NOT NULL,
-    "level" "public"."PermissionLevel" NOT NULL,
+    "level" "PermissionLevel" NOT NULL,
 
     CONSTRAINT "ServicePermission_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "public"."AuditEvent" (
+CREATE TABLE "AuditEvent" (
     "id" TEXT NOT NULL,
     "projectId" TEXT,
     "actorId" TEXT NOT NULL,
@@ -130,61 +130,61 @@ CREATE TABLE "public"."AuditEvent" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_inviteToken_key" ON "public"."User"("inviteToken");
+CREATE UNIQUE INDEX "User_inviteToken_key" ON "User"("inviteToken");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Company_accountId_name_key" ON "public"."Company"("accountId", "name");
+CREATE UNIQUE INDEX "Company_accountId_name_key" ON "Company"("accountId", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Role_accountId_name_key" ON "public"."Role"("accountId", "name");
+CREATE UNIQUE INDEX "Role_accountId_name_key" ON "Role"("accountId", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Project_accountId_name_key" ON "public"."Project"("accountId", "name");
+CREATE UNIQUE INDEX "Project_accountId_name_key" ON "Project"("accountId", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ProjectMember_projectId_userId_key" ON "public"."ProjectMember"("projectId", "userId");
+CREATE UNIQUE INDEX "ProjectMember_projectId_userId_key" ON "ProjectMember"("projectId", "userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ServicePermission_projectId_service_subjectType_subjectId_key" ON "public"."ServicePermission"("projectId", "service", "subjectType", "subjectId");
+CREATE UNIQUE INDEX "ServicePermission_projectId_service_subjectType_subjectId_key" ON "ServicePermission"("projectId", "service", "subjectType", "subjectId");
 
 -- CreateIndex
-CREATE INDEX "AuditEvent_projectId_createdAt_idx" ON "public"."AuditEvent"("projectId", "createdAt");
+CREATE INDEX "AuditEvent_projectId_createdAt_idx" ON "AuditEvent"("projectId", "createdAt");
 
 -- AddForeignKey
-ALTER TABLE "public"."User" ADD CONSTRAINT "User_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "public"."Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Company" ADD CONSTRAINT "Company_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "public"."Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Company" ADD CONSTRAINT "Company_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Role" ADD CONSTRAINT "Role_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "public"."Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Role" ADD CONSTRAINT "Role_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Project" ADD CONSTRAINT "Project_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "public"."Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Project" ADD CONSTRAINT "Project_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."ProjectMember" ADD CONSTRAINT "ProjectMember_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ProjectMember" ADD CONSTRAINT "ProjectMember_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."ProjectMember" ADD CONSTRAINT "ProjectMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ProjectMember" ADD CONSTRAINT "ProjectMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."ProjectMember" ADD CONSTRAINT "ProjectMember_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "public"."Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "ProjectMember" ADD CONSTRAINT "ProjectMember_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."MemberRole" ADD CONSTRAINT "MemberRole_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "public"."ProjectMember"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "MemberRole" ADD CONSTRAINT "MemberRole_memberId_fkey" FOREIGN KEY ("memberId") REFERENCES "ProjectMember"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."MemberRole" ADD CONSTRAINT "MemberRole_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "public"."Role"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "MemberRole" ADD CONSTRAINT "MemberRole_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."ServicePermission" ADD CONSTRAINT "ServicePermission_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ServicePermission" ADD CONSTRAINT "ServicePermission_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."AuditEvent" ADD CONSTRAINT "AuditEvent_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AuditEvent" ADD CONSTRAINT "AuditEvent_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."AuditEvent" ADD CONSTRAINT "AuditEvent_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AuditEvent" ADD CONSTRAINT "AuditEvent_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

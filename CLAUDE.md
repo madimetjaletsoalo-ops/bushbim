@@ -19,6 +19,10 @@ BushBIM is a construction collaboration platform for African luxury resort devel
 - Postgres: `service postgresql start`, then create the user/db `bushbim`/`bushbim` (see `.env.example`), or run `docker compose up -d`.
 - e2e: `CHROMIUM_PATH=/opt/pw-browsers/chromium npm run e2e` when a preinstalled Chromium exists.
 
+## Production (Vercel + Supabase)
+- Merging into `main` deploys production. The build runs `prisma migrate deploy` against the live Supabase database (the `bushbim` schema, `bushbim_app` role), so every migration must be safe to apply to existing data: add columns as nullable or with defaults, never drop or rename without a data step.
+- Tables live in the `bushbim` schema, never `public`. Local `.env` uses `schema=bushbim` so generated SQL matches production. Before committing, check that a new migration doesn't reference `"public".`.
+
 ## Conventions
 - Default currency ZAR and timezone Africa/Johannesburg, both configurable per project. Keep pages usable at phone width (site teams use phones).
 - Keep payloads small and compress images client-side: users are often on slow rural connections.

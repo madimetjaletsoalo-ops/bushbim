@@ -1,6 +1,6 @@
 import "server-only";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -30,6 +30,8 @@ export interface Storage {
   presignGet(key: string, fileName: string, contentType: string, inline?: boolean): Promise<string>;
   /** Reads a whole object on the server (used by the PDF export). */
   read(key: string): Promise<Uint8Array>;
+  /** Writes a whole object from the server (used when reviews copy approved files). */
+  write(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** Size of a stored object, or null if it doesn't exist. */
   head(key: string): Promise<number | null>;
   remove(keys: string[]): Promise<void>;
@@ -69,6 +71,9 @@ function s3Storage(bucket: string): Storage {
       const r = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       if (!r.Body) throw new Error("Empty object");
       return r.Body.transformToByteArray();
+    },
+    async write(key, bytes, contentType) {
+      await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: contentType }));
     },
     async head(key) {
       try {
@@ -111,6 +116,11 @@ function localStorage(): Storage {
     },
     async read(key) {
       return new Uint8Array(await readFile(localPath(key)));
+    },
+    async write(key, bytes) {
+      const file = localPath(key);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, bytes);
     },
     async head(key) {
       try {

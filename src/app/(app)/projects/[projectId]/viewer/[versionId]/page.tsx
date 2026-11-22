@@ -3,6 +3,7 @@ import { Viewer } from "@/components/docs/Viewer";
 import { db } from "@/lib/db";
 import { getDocsContext } from "@/modules/docs/access";
 import { levelAtLeast } from "@/modules/docs/folder-permissions";
+import { isActiveReviewerOf } from "@/modules/reviews/server";
 import { isImage, isViewable, visibleTo, type Pt } from "@/modules/docs/markup";
 
 export default async function ViewerPage({
@@ -38,6 +39,8 @@ export default async function ViewerPage({
     authorName: m.author?.name ?? "Former member",
   }));
   const api = `/api/projects/${projectId}/versions/${versionId}`;
+  // reviewers of an open review of this version can publish their markups
+  const canPublish = levelAtLeast(level, "UPLOAD") || (await isActiveReviewerOf(projectId, versionId, ctx.member));
   // previous version, for "Compare with V(n-1)"
   const prev = v.document.versions.find((x) => x.number === v.number - 1) ?? null;
   return (
@@ -52,7 +55,7 @@ export default async function ViewerPage({
       exportHref={levelAtLeast(level, "VIEW_DOWNLOAD") ? `${api}/export` : null}
       backHref={`/projects/${projectId}/docs/folders/${v.document.folderId}`}
       me={ctx.user.id}
-      canPublish={levelAtLeast(level, "UPLOAD")}
+      canPublish={canPublish}
       canCalibrate={levelAtLeast(level, "UPLOAD")}
       canManage={levelAtLeast(level, "MANAGE")}
       initialMarkups={markups}

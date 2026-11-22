@@ -4,11 +4,12 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { folderAccess, getDocsContext } from "./access";
 import type { FolderLevel } from "./folder-permissions";
+import { isActiveReviewerOf } from "@/modules/reviews/server";
 import { calibrate, calibrationInput, markupInput, type Pt } from "./markup";
 
 // Markup rules (folder level on the document's folder):
 // - view published markups, and add private ones: View
-// - publish: Upload
+// - publish: Upload, or a reviewer of the current step of an open review of this version
 // - delete: the author, or Manage for anyone's
 // - calibrate the drawing scale (shared by everyone): Upload
 
@@ -86,8 +87,12 @@ export async function setMarkupStatus(projectId: string, markupId: string, statu
   const s = z.enum(["PRIVATE", "PUBLISHED"]).safeParse(status);
   if (!s.success) return { ok: false, error: "Invalid status" };
   if (ctx.markup.authorId !== ctx.user.id) return { ok: false, error: "Only the author can publish or unpublish a markup." };
-  if (s.data === "PUBLISHED" && !(await versionAccess(projectId, ctx.markup.versionId, "UPLOAD")))
-    return { ok: false, error: "You need Upload access to this folder to publish markups." };
+  if (
+    s.data === "PUBLISHED" &&
+    !(await versionAccess(projectId, ctx.markup.versionId, "UPLOAD")) &&
+    !(await isActiveReviewerOf(projectId, ctx.markup.versionId, ctx.member))
+  )
+    return { ok: false, error: "You need Upload access to this folder, or to be reviewing this file, to publish markups." };
   const m = await db.$transaction(async (tx) => {
     const u = await tx.markup.update({ where: { id: ctx.markup.id }, data: { status: s.data } });
     await tx.auditEvent.create({

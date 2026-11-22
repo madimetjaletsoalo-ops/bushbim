@@ -12,6 +12,7 @@ import { MAX_FILES_PER_UPLOAD, MAX_UPLOAD_BYTES, checkName, nameKey, storageKey,
 import { secretBytes, signToken, uploadClaims, verifyToken } from "./token";
 import { folderAccess } from "./access";
 import { syncSheetsForVersion } from "./sheets-server";
+import { autoStartReviews } from "@/modules/reviews/server";
 import { DEFAULT_SUBJECT_ID, FOLDER_LEVELS, FOLDER_LEVEL_LABELS, buildIndex, folderLevel, levelAtLeast, type FolderGrant } from "./folder-permissions";
 
 const UPLOAD_TOKEN_TTL = 60 * 60;
@@ -213,6 +214,12 @@ export async function completeUpload(projectId: string, token: string): Promise<
     await syncSheetsForVersion(projectId, doc.versionId);
   } catch (e) {
     console.error("sheets: failed for", doc.name, e);
+  }
+  // workflows set to auto-start on this folder open a review of the new version
+  try {
+    if (await autoStartReviews(projectId, c.fid, doc.versionId, ctx.user.id)) revalidatePath(`/projects/${projectId}/reviews`, "layout");
+  } catch (e) {
+    console.error("reviews: auto-start failed for", doc.name, e);
   }
   revalidateDocs(projectId);
   return { ok: true, name: doc.name, version: doc.currentVersion };

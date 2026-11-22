@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function NavLink({ href, children, variant = "tab" }: { href: string; children: React.ReactNode; variant?: "tab" | "side" }) {
-  const active = usePathname().startsWith(href);
+export function NavLink({ href, children, variant = "tab", exact = false }: { href: string; children: React.ReactNode; variant?: "tab" | "side"; exact?: boolean }) {
+  const pathname = usePathname();
+  const active = exact ? pathname === href : pathname.startsWith(href);
   if (variant === "side")
     return (
       <Link

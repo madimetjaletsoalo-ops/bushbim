@@ -10,7 +10,8 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | --- | --- |
 | Project Admin: projects, members, companies, roles, service permissions, activity log, CSV bulk invite, **add one person to many projects at once** | ✅ Built |
 | Document Control: Plans / Project Files folders, subfolders, multi-file upload with progress, automatic versioning (V2, V3…), version history with downloads, list/grid views with sorting | ✅ Built (item 1) |
-| Document Control: folder permissions, viewer and markups, sheets and sets, reviews, transmittals | Backlog items 2–4, 7–8 |
+| Document Control: folder permissions (View → Manage per user, role or company, inherited by subfolders, private folders) | ✅ Built (item 2) |
+| Document Control: viewer and markups, sheets and sets, reviews, transmittals | Backlog items 3–4, 7–8 |
 | Field Management (issues, checklists, daily logs) | Backlog items 5–6, 9–10 |
 
 ## Stack
@@ -48,7 +49,7 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
-src/modules/docs/           Document Control: server actions, pure folder/sort/version logic, signed upload tokens
+src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
 src/app/(app)/projects/[projectId]/{admin,docs,field}/   modules
 ```
@@ -59,7 +60,20 @@ src/app/(app)/projects/[projectId]/{admin,docs,field}/   modules
 - **Project admin**: full control of one project. Has Manager level on every service.
 - **Project member**: can open only the services enabled for them (Document Control, Issues, Checklists, Daily Logs). On each one they are a Viewer unless a grant to their user, role or company raises them to Creator or Manager. The highest applicable grant wins.
 
-In Document Control, Viewers browse and download, Creators also upload files and create folders, and Managers also rename and delete folders. The Plans and Project Files roots can't be renamed or deleted. Folder-level permissions arrive with backlog item 2.
+Document Control adds **folder permissions** on top (`src/modules/docs/folder-permissions.ts`):
+
+| Level | Can |
+| --- | --- |
+| View | see the folder, its files and versions (no download) |
+| View + Download | also download |
+| Upload | also upload files and new versions |
+| Edit | also create subfolders |
+| Manage | also rename, delete and change the folder's permissions |
+
+- With no folder grants, Viewers get View + Download and Creators get Edit everywhere.
+- A grant to "Project members", a user, a role or a company applies to that folder and its subfolders until a subfolder sets its own grant for the same subject. A member's level is the highest of the grants that apply to them.
+- Set "Project members" to "No access" on a folder to make it private, then grant who needs it. Project admins and Document Control Managers always have Manage.
+- The Plans and Project Files roots can't be renamed or deleted.
 
 Every module checks access through `can(member, service, action, grants)` in `src/lib/permissions.ts`.
 

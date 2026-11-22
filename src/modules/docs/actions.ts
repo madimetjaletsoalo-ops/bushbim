@@ -6,25 +6,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getProjectContext } from "@/lib/auth";
-import { can, type Action } from "@/lib/permissions";
 import { getStorage, type PresignedPut } from "@/lib/storage";
 import type { ActionState } from "@/modules/admin/types";
 import { MAX_FILES_PER_UPLOAD, MAX_UPLOAD_BYTES, checkName, nameKey, storageKey, subtreeIds, versionLabel } from "./logic";
 import { secretBytes, signToken, uploadClaims, verifyToken } from "./token";
+import { folderAccess } from "./access";
+import { DEFAULT_SUBJECT_ID, FOLDER_LEVELS, FOLDER_LEVEL_LABELS, buildIndex, folderLevel, levelAtLeast, type FolderGrant } from "./folder-permissions";
 
 const UPLOAD_TOKEN_TTL = 60 * 60;
 
-/** Re-checks project access and the DOCS permission for every docs action. */
-async function docsAccess(projectId: string, action: Action) {
-  const ctx = await getProjectContext(projectId);
-  if (!can(ctx.member, "DOCS", action, ctx.grants)) return null;
-  return ctx;
-}
-
-async function findFolder(projectId: string, folderId: string) {
-  return db.folder.findFirst({ where: { id: folderId, projectId } });
-}
+// Every action re-checks access with folderAccess(): project membership, the
+// Document Control service and the member's folder level (see folder-permissions.ts).
 
 const fail = (error: string): ActionState => ({ ok: false, error });
 const revalidateDocs = (projectId: string) => revalidatePath(`/projects/${projectId}/docs`, "layout");
@@ -36,14 +28,13 @@ const nameField = z.object({ name: z.string().max(400) });
 // ---------- folders ----------
 
 export async function createFolder(projectId: string, parentId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const ctx = await docsAccess(projectId, "create");
+  const ctx = await folderAccess(projectId, parentId, "EDIT");
   if (!ctx) return fail("You don't have permission to create folders here.");
+  const parent = ctx.folder;
   const parsed = nameField.safeParse({ name: form.get("name") ?? "" });
   if (!parsed.success || !idSchema.safeParse(parentId).success) return fail("Invalid input");
   const checked = checkName(parsed.data.name);
   if (!checked.ok) return fail(checked.error);
-  const parent = await findFolder(projectId, parentId);
-  if (!parent) return fail("Folder not found");
   const siblings = await db.folder.findMany({ where: { parentId }, select: { name: true } });
   if (siblings.some((s) => nameKey(s.name) === nameKey(checked.name))) return fail("A folder with this name already exists here.");
   try {
@@ -62,14 +53,13 @@ export async function createFolder(projectId: string, parentId: string, _: Actio
 }
 
 export async function renameFolder(projectId: string, folderId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const ctx = await docsAccess(projectId, "manage");
-  if (!ctx) return fail("You don't have permission to rename folders.");
+  const ctx = await folderAccess(projectId, folderId, "MANAGE");
+  if (!ctx) return fail("You don't have permission to rename this folder.");
   const parsed = nameField.safeParse({ name: form.get("name") ?? "" });
   if (!parsed.success || !idSchema.safeParse(folderId).success) return fail("Invalid input");
   const checked = checkName(parsed.data.name);
   if (!checked.ok) return fail(checked.error);
-  const folder = await findFolder(projectId, folderId);
-  if (!folder) return fail("Folder not found");
+  const folder = ctx.folder;
   if (folder.root) return fail(`"${folder.name}" is a top-level folder and can't be renamed.`);
   if (folder.name === checked.name) return { ok: true, message: "No change" };
   const siblings = await db.folder.findMany({ where: { parentId: folder.parentId, NOT: { id: folder.id } }, select: { name: true } });
@@ -91,10 +81,10 @@ export async function renameFolder(projectId: string, folderId: string, _: Actio
 
 /** Deletes a subfolder with everything in it (after the user confirms in the UI). */
 export async function deleteFolder(projectId: string, folderId: string) {
-  const ctx = await docsAccess(projectId, "manage");
-  if (!ctx || !idSchema.safeParse(folderId).success) return;
-  const folder = await findFolder(projectId, folderId);
-  if (!folder || folder.root || !folder.parentId) return;
+  const ctx = await folderAccess(projectId, folderId, "MANAGE");
+  if (!ctx) return;
+  const folder = ctx.folder;
+  if (folder.root || !folder.parentId) return;
   const all = await db.folder.findMany({ where: { projectId }, select: { id: true, parentId: true } });
   const ids = subtreeIds(all, folder.id);
   const versions = await db.documentVersion.findMany({
@@ -138,11 +128,10 @@ const safeContentType = (t: string) => (/^[\w.+-]+\/[\w.+-]+$/.test(t) ? t : "ap
 
 /** Step 1: the browser asks for one presigned upload URL per file. */
 export async function requestUploads(projectId: string, folderId: string, files: unknown): Promise<RequestUploadsResult> {
-  const ctx = await docsAccess(projectId, "create");
+  const ctx = await folderAccess(projectId, folderId, "UPLOAD");
   if (!ctx) return { ok: false, error: "You don't have permission to upload here." };
   const parsed = z.array(fileSpec).min(1).max(MAX_FILES_PER_UPLOAD).safeParse(files);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid files" };
-  if (!idSchema.safeParse(folderId).success || !(await findFolder(projectId, folderId))) return { ok: false, error: "Folder not found" };
   const storage = getStorage();
   const tickets: UploadTicket[] = [];
   for (const f of parsed.data) {
@@ -169,11 +158,12 @@ export type CompleteUploadResult = { ok: true; name: string; version: number } |
  * stacks as the next version: V2, V3…
  */
 export async function completeUpload(projectId: string, token: string): Promise<CompleteUploadResult> {
-  const ctx = await docsAccess(projectId, "create");
-  if (!ctx) return { ok: false, error: "You don't have permission to upload here." };
   const c = typeof token === "string" ? await verifyToken(token, uploadClaims, secretBytes()) : null;
-  if (!c || c.pid !== projectId || c.uid !== ctx.user.id) return { ok: false, error: "Upload link is invalid or has expired. Try again." };
-  if (!(await findFolder(projectId, c.fid))) return { ok: false, error: "The folder was deleted during the upload." };
+  if (!c || c.pid !== projectId) return { ok: false, error: "Upload link is invalid or has expired. Try again." };
+  // re-check against the folder in the token: access may have changed during the upload
+  const ctx = await folderAccess(projectId, c.fid, "UPLOAD");
+  if (!ctx) return { ok: false, error: "You no longer have permission to upload to this folder, or it was deleted." };
+  if (c.uid !== ctx.user.id) return { ok: false, error: "Upload link is invalid or has expired. Try again." };
   if (await db.documentVersion.findUnique({ where: { storageKey: c.key } })) return { ok: false, error: "This upload was already saved." };
   const storage = getStorage();
   const stored = await storage.head(c.key);
@@ -219,4 +209,81 @@ export async function completeUpload(projectId: string, token: string): Promise<
   }
   revalidateDocs(projectId);
   return { ok: true, name: doc.name, version: doc.currentVersion };
+}
+
+// ---------- folder permissions ----------
+
+const grantSchema = z.object({
+  subjectType: z.enum(["DEFAULT", "USER", "ROLE", "COMPANY"]),
+  subjectId: z.string().min(1).max(64),
+  level: z.enum(FOLDER_LEVELS),
+});
+
+/** Parses "TYPE:id" from the subject select ("DEFAULT:*", "COMPANY:abc", ...). */
+function parseSubject(raw: unknown) {
+  const [subjectType, ...rest] = String(raw ?? "").split(":");
+  return { subjectType, subjectId: rest.join(":") };
+}
+
+async function subjectExists(projectId: string, accountId: string, type: string, id: string) {
+  if (type === "DEFAULT") return id === DEFAULT_SUBJECT_ID;
+  if (type === "USER") return !!(await db.projectMember.findFirst({ where: { projectId, userId: id } }));
+  if (type === "ROLE") return !!(await db.role.findFirst({ where: { id, accountId } }));
+  if (type === "COMPANY") return !!(await db.company.findFirst({ where: { id, accountId } }));
+  return false;
+}
+
+/** The caller's level on the folder if `change` were applied (null level = remove the grant). */
+function levelAfter(
+  ctx: NonNullable<Awaited<ReturnType<typeof folderAccess>>>,
+  change: Omit<FolderGrant, "level"> & { level: FolderGrant["level"] | null },
+) {
+  const grants: FolderGrant[] = [];
+  for (const list of ctx.index.grants.values())
+    for (const g of list)
+      if (!(g.folderId === change.folderId && g.subjectType === change.subjectType && g.subjectId === change.subjectId)) grants.push(g);
+  if (change.level) grants.push(change as FolderGrant);
+  return folderLevel(ctx.member, ctx.grants, buildIndex([...ctx.index.byId.values()], grants), change.folderId);
+}
+
+export async function setFolderPermission(projectId: string, folderId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  const ctx = await folderAccess(projectId, folderId, "MANAGE");
+  if (!ctx) return fail("You don't have permission to change who can access this folder.");
+  const parsed = grantSchema.safeParse({ ...parseSubject(form.get("subject")), level: form.get("level") });
+  if (!parsed.success) return fail("Pick who and what level.");
+  const { subjectType, subjectId, level } = parsed.data;
+  if (!(await subjectExists(projectId, ctx.user.accountId, subjectType, subjectId))) return fail("Unknown user, role or company");
+  if (!levelAtLeast(levelAfter(ctx, { folderId, subjectType, subjectId, level }), "MANAGE"))
+    return fail("That would remove your own Manage access to this folder. Ask a project admin to make this change.");
+  await db.$transaction(async (tx) => {
+    await tx.folderPermission.upsert({
+      where: { folderId_subjectType_subjectId: { folderId, subjectType, subjectId } },
+      create: { folderId, subjectType, subjectId, level },
+      update: { level },
+    });
+    await tx.auditEvent.create({
+      data: { actorId: ctx.user.id, projectId, action: "folder.permission_set", details: { folderId, folder: ctx.folder.name, subjectType, subjectId, level } },
+    });
+  });
+  revalidateDocs(projectId);
+  return { ok: true, message: `Saved: ${FOLDER_LEVEL_LABELS[level]}` };
+}
+
+export async function removeFolderPermission(projectId: string, folderId: string, subject: string) {
+  const ctx = await folderAccess(projectId, folderId, "MANAGE");
+  if (!ctx) return;
+  const { subjectType, subjectId } = parseSubject(subject);
+  const parsed = grantSchema.omit({ level: true }).safeParse({ subjectType, subjectId });
+  if (!parsed.success) return;
+  const key = { folderId, subjectType: parsed.data.subjectType, subjectId: parsed.data.subjectId };
+  const existing = await db.folderPermission.findUnique({ where: { folderId_subjectType_subjectId: key } });
+  if (!existing) return;
+  if (!levelAtLeast(levelAfter(ctx, { ...key, level: null }), "MANAGE")) return;
+  await db.$transaction(async (tx) => {
+    await tx.folderPermission.delete({ where: { id: existing.id } });
+    await tx.auditEvent.create({
+      data: { actorId: ctx.user.id, projectId, action: "folder.permission_removed", details: { folderId, folder: ctx.folder.name, ...parsed.data, was: existing.level } },
+    });
+  });
+  revalidateDocs(projectId);
 }

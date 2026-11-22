@@ -76,6 +76,15 @@ export function FolderTree({ projectId, tree }: { projectId: string; tree: TreeN
               ) : (
                 <span className="w-7 shrink-0" />
               )}
+              {n.locked ? (
+                <span
+                  className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-sm text-ink-soft"
+                  title="You can only open the shared folders inside this one"
+                >
+                  <FolderGlyph root={!!n.root} />
+                  <span className="truncate">{n.name}</span>
+                </span>
+              ) : (
               <Link
                 href={`/projects/${projectId}/docs/folders/${n.id}`}
                 aria-current={n.id === activeId ? "page" : undefined}
@@ -84,6 +93,7 @@ export function FolderTree({ projectId, tree }: { projectId: string; tree: TreeN
                 <FolderGlyph root={!!n.root} />
                 <span className="truncate">{n.name}</span>
               </Link>
+              )}
             </div>
             {hasKids && isOpen && render(n.children, depth + 1)}
           </li>

@@ -10,7 +10,8 @@ export interface VersionRow {
   size: number;
   uploadedBy: string;
   createdAt: string; // preformatted in the project timezone
-  downloadHref: string;
+  /** null when the member may view but not download */
+  downloadHref: string | null;
 }
 
 /** The "V3" badge opens a side drawer listing every version with a download link. */
@@ -61,9 +62,13 @@ export function VersionDrawer({ name, versions }: { name: string; versions: Vers
                       {v.createdAt} · {v.uploadedBy} · {formatBytes(v.size)}
                     </p>
                   </div>
-                  <a href={v.downloadHref} className={btnGhost} aria-label={`Download V${v.number}`}>
-                    Download
-                  </a>
+                  {v.downloadHref ? (
+                    <a href={v.downloadHref} className={btnGhost} aria-label={`Download V${v.number}`}>
+                      Download
+                    </a>
+                  ) : (
+                    <span className="text-xs text-ink-soft">View only</span>
+                  )}
                 </li>
               ))}
             </ol>

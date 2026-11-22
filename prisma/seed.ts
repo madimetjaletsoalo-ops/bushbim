@@ -32,8 +32,8 @@ async function main() {
   );
   const projects = await Promise.all(
     [
-      { name: "Kruger Lodge Villas", code: "KLV", type: "Safari lodge", location: "Sabi Sand", country: "South Africa" },
-      { name: "Zanzibar Beach Retreat", code: "ZBR", type: "Beach resort", location: "Matemwe", country: "Tanzania", currency: "USD", timezone: "Africa/Dar_es_Salaam" },
+      { name: "Kruger Lodge Villas", code: "KLV", type: "Safari lodge", location: "Sabi Sand", country: "South Africa", coverImage: "/projects/kruger-lodge-villas.webp" },
+      { name: "Zanzibar Beach Retreat", code: "ZBR", type: "Beach resort", location: "Matemwe", country: "Tanzania", currency: "USD", timezone: "Africa/Dar_es_Salaam", coverImage: "/projects/zanzibar-beach-retreat.webp" },
     ].map((p) => db.project.create({ data: { accountId: account.id, ...p } })),
   );
   const people = [

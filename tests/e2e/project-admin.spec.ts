@@ -14,9 +14,20 @@ test("sign up, create projects, add members, add to many projects, grant permiss
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
 
-  // three projects
-  for (const name of ["Okavango Camp", "Serengeti Villas", "Cape Winelands Spa"]) {
+  // "+ New project" sits at the top, above the list; open on an empty account
+  const newProject = page.getByTestId("new-project");
+  const list = page.getByRole("region", { name: "Project list" });
+  const top = async (l: typeof list) => (await l.boundingBox())!.y;
+  expect(await top(newProject)).toBeLessThan(await top(list));
+  await expect(page.getByLabel("Name")).toBeVisible();
+
+  // three projects; once projects exist the form starts collapsed
+  for (const [i, name] of ["Okavango Camp", "Serengeti Villas", "Cape Winelands Spa"].entries()) {
     await page.goto("/projects");
+    if (i > 0) {
+      await expect(page.getByLabel("Name")).toBeHidden();
+      await newProject.getByText("New project").click();
+    }
     await page.getByLabel("Name").fill(name);
     await page.getByRole("button", { name: "Create project" }).click();
     await expect(page.getByRole("heading", { name: "Members" })).toBeVisible();
@@ -35,6 +46,12 @@ test("sign up, create projects, add members, add to many projects, grant permiss
   await page.getByRole("button", { name: "Add role" }).click();
   await expect(page.getByRole("cell", { name: "Subcontractor" })).toBeVisible();
 
+  // new projects have no photo, so their cards show an initials placeholder
+  await page.goto("/projects");
+  const okavango = page.getByRole("link", { name: /Okavango Camp/ });
+  await expect(okavango.getByTestId("project-cover")).toHaveText("OC");
+  await expect(okavango.getByRole("img")).toHaveCount(0);
+
   // add to all three projects at once
   await page.goto("/account/add-to-projects");
   const form = page.getByTestId("multi-project-form");
@@ -51,6 +68,8 @@ test("sign up, create projects, add members, add to many projects, grant permiss
   for (const name of ["Okavango Camp", "Serengeti Villas", "Cape Winelands Spa"]) {
     await page.goto("/projects");
     await page.getByRole("link", { name: new RegExp(name) }).click();
+    // opening a project lands on Document Control's Plans folder; wait for it before navigating on
+    await expect(page.getByRole("heading", { name: "Plans", level: 2 })).toBeVisible();
     await page.getByRole("link", { name: "Project Admin" }).click();
     const row = page.getByTestId("members-table").getByRole("row", { name: /Bongani Guest/ });
     await expect(row).toContainText("Mopane Thatchers");

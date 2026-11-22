@@ -93,6 +93,8 @@ model Project {
   startDate   DateTime?
   endDate     DateTime?
   status      ProjectStatus       @default(ACTIVE)
+  /// cover photo shown in the project list, e.g. "/projects/kruger-lodge-villas.webp"
+  coverImage  String?
   createdAt   DateTime            @default(now())
   members     ProjectMember[]
   permissions ServicePermission[]

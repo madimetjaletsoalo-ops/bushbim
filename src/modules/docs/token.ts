@@ -27,6 +27,8 @@ export const transferClaims = z.object({
   /** get: download file name and type */
   fn: z.string().optional(),
   ct: z.string().optional(),
+  /** get: display in the browser instead of downloading */
+  inline: z.boolean().optional(),
 });
 export type TransferClaims = z.infer<typeof transferClaims>;
 

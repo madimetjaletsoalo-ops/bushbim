@@ -8,9 +8,11 @@ import { Uploader } from "@/components/docs/Uploader";
 import { VersionDrawer, type VersionRow } from "@/components/docs/VersionDrawer";
 import { btnDanger, btnGhost, card, input, td, th } from "@/components/ui";
 import { db } from "@/lib/db";
-import { getProjectContext } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { FolderPermissions } from "@/components/docs/FolderPermissions";
+import { getDocsContext } from "@/modules/docs/access";
 import { createFolder, deleteFolder, renameFolder } from "@/modules/docs/actions";
+import { FOLDER_LEVEL_LABELS, levelAtLeast } from "@/modules/docs/folder-permissions";
+import { isViewable } from "@/modules/docs/markup";
 import { ancestors, fileKind, formatBytes, parseSort, sortFolderNames, sortItems, type SortKey } from "@/modules/docs/logic";
 
 type Search = { view?: string; sort?: string; dir?: string };
@@ -18,16 +20,22 @@ type Search = { view?: string; sort?: string; dir?: string };
 export default async function FolderPage({ params, searchParams }: { params: Promise<{ projectId: string; folderId: string }>; searchParams: Promise<Search> }) {
   const { projectId, folderId } = await params;
   const sp = await searchParams;
-  const { project, member, grants } = await getProjectContext(projectId);
-  if (!can(member, "DOCS", "view", grants)) notFound();
-  const canCreate = can(member, "DOCS", "create", grants);
-  const canManage = can(member, "DOCS", "manage", grants);
+  const docsCtx = await getDocsContext(projectId);
+  const { project } = docsCtx;
+  // folder-level access (see modules/docs/folder-permissions.ts); 404 rather than reveal the folder exists
+  const level = docsCtx.levelOn(folderId);
+  if (!levelAtLeast(level, "VIEW")) notFound();
+  const canDownload = levelAtLeast(level, "VIEW_DOWNLOAD");
+  const canUpload = levelAtLeast(level, "UPLOAD");
+  const canCreate = levelAtLeast(level, "EDIT");
+  const canManage = levelAtLeast(level, "MANAGE");
+  const { visible: shown, openable } = docsCtx.visible();
 
   const allFolders = await db.folder.findMany({ where: { projectId }, select: { id: true, parentId: true, name: true, root: true, updatedAt: true } });
   const folder = allFolders.find((f) => f.id === folderId);
   if (!folder) notFound();
   const crumbs = ancestors(allFolders, folderId);
-  const subfolders = sortFolderNames(allFolders.filter((f) => f.parentId === folderId));
+  const subfolders = sortFolderNames(allFolders.filter((f) => f.parentId === folderId && shown.has(f.id)));
   const docs = await db.document.findMany({
     where: { folderId },
     include: { versions: { orderBy: { number: "desc" }, include: { uploadedBy: { select: { name: true } } } } },
@@ -54,8 +62,10 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
       size: v.size,
       uploadedBy: v.uploadedBy?.name ?? "Former member",
       createdAt: fmt.format(v.createdAt),
-      downloadHref: `/api/projects/${projectId}/versions/${v.id}`,
+      downloadHref: canDownload ? `/api/projects/${projectId}/versions/${v.id}` : null,
+      viewHref: isViewable(v.contentType, v.fileName) ? `/projects/${projectId}/viewer/${v.id}` : null,
     }));
+  const viewHref = (versionId: string) => `/projects/${projectId}/viewer/${versionId}`;
   const folderHref = (id: string) => `/projects/${projectId}/docs/folders/${id}?view=${view}`;
   const empty = subfolders.length === 0 && sorted.length === 0;
 
@@ -69,14 +79,17 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
               {i === crumbs.length - 1 ? (
                 <span aria-current="page" className="font-medium text-ink">{c.name}</span>
               ) : (
-                <Link className="hover:text-ink hover:underline" href={folderHref(c.id)}>{c.name}</Link>
+                openable.has(c.id) ? <Link className="hover:text-ink hover:underline" href={folderHref(c.id)}>{c.name}</Link> : <span>{c.name}</span>
               )}
             </span>
           ))}
         </nav>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">{folder.name}</h2>
-          {canCreate && <Uploader projectId={projectId} folderId={folderId} />}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs text-ink-soft" data-testid="my-access">Your access: {FOLDER_LEVEL_LABELS[level]}</span>
+            {canUpload && <Uploader projectId={projectId} folderId={folderId} />}
+          </div>
         </div>
       </div>
 
@@ -113,6 +126,8 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
         </div>
       )}
 
+      {canManage && <FolderPermissions projectId={projectId} folderId={folderId} />}
+
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <div className="flex items-center gap-1" role="group" aria-label="Sort by">
           <span className="text-ink-soft">Sort:</span>
@@ -131,7 +146,7 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
 
       {empty ? (
         <div className={`${card} p-8 text-center text-sm text-ink-soft`}>
-          This folder is empty.{canCreate && " Upload files or create a subfolder to get started."}
+          This folder is empty.{canUpload && " Upload files to get started."}
         </div>
       ) : view === "list" ? (
         <div className={`${card} overflow-x-auto`}>
@@ -149,9 +164,15 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
               {subfolders.map((f) => (
                 <tr key={f.id} data-testid="folder-row">
                   <td className={td} colSpan={5}>
-                    <Link href={folderHref(f.id)} className="flex items-center gap-2 font-medium hover:underline">
-                      <FolderGlyph /> {f.name}
-                    </Link>
+                    {openable.has(f.id) ? (
+                      <Link href={folderHref(f.id)} className="flex items-center gap-2 font-medium hover:underline">
+                        <FolderGlyph /> {f.name}
+                      </Link>
+                    ) : (
+                      <span className="flex items-center gap-2 text-ink-soft" title="You can only open the shared folders inside this one">
+                        <FolderGlyph /> {f.name}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -160,11 +181,24 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
                   <td className={td}>
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="w-12 shrink-0 rounded bg-muted px-1 py-0.5 text-center text-[10px] font-semibold uppercase text-ink-soft">{fileKind(d.name)}</span>
-                      <a href={`/api/projects/${projectId}/versions/${d.versions[0]?.id}`} className="break-all font-medium hover:underline">{d.name}</a>
+                      {canDownload ? (
+                        <a href={`/api/projects/${projectId}/versions/${d.versions[0]?.id}`} className="break-all font-medium hover:underline" data-testid="download-link">{d.name}</a>
+                      ) : (
+                        <span className="break-all font-medium">{d.name}</span>
+                      )}
                     </div>
                     <p className="mt-1 text-xs text-ink-soft sm:hidden">{formatBytes(d.size)} · {fmtDate.format(d.updatedAt)}</p>
                   </td>
-                  <td className={td}><VersionDrawer name={d.name} versions={versionRows(d)} /></td>
+                  <td className={td}>
+                    <div className="flex items-center gap-2">
+                      <VersionDrawer name={d.name} versions={versionRows(d)} />
+                      {isViewable(d.contentType, d.name) && d.versions[0] && (
+                        <Link href={viewHref(d.versions[0].id)} className="text-xs font-medium text-brand hover:underline" aria-label={`Open ${d.name} in the viewer`} data-testid="view-link">
+                          View
+                        </Link>
+                      )}
+                    </div>
+                  </td>
                   <td className={`${td} hidden whitespace-nowrap sm:table-cell`}>{formatBytes(d.size)}</td>
                   <td className={`${td} hidden whitespace-nowrap md:table-cell`}>{fmt.format(d.updatedAt)}</td>
                   <td className={`${td} hidden lg:table-cell`}>{d.versions[0]?.uploadedBy?.name ?? "—"}</td>
@@ -177,18 +211,34 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-testid="file-grid">
           {subfolders.map((f) => (
             <li key={f.id} className={`${card} p-3`}>
-              <Link href={folderHref(f.id)} className="flex flex-col gap-2 font-medium hover:underline">
-                <span className="flex h-16 items-center justify-center rounded bg-muted"><FolderGlyph /></span>
-                <span className="truncate text-sm">{f.name}</span>
-              </Link>
+              {openable.has(f.id) ? (
+                <Link href={folderHref(f.id)} className="flex flex-col gap-2 font-medium hover:underline">
+                  <span className="flex h-16 items-center justify-center rounded bg-muted"><FolderGlyph /></span>
+                  <span className="truncate text-sm">{f.name}</span>
+                </Link>
+              ) : (
+                <span className="flex flex-col gap-2 text-ink-soft">
+                  <span className="flex h-16 items-center justify-center rounded bg-muted"><FolderGlyph /></span>
+                  <span className="truncate text-sm">{f.name}</span>
+                </span>
+              )}
             </li>
           ))}
           {sorted.map((d) => (
             <li key={d.id} className={`${card} flex flex-col gap-2 p-3`} data-testid="file-card">
-              <a href={`/api/projects/${projectId}/versions/${d.versions[0]?.id}`} className="flex h-16 items-center justify-center rounded bg-muted text-sm font-semibold text-ink-soft">
-                {fileKind(d.name)}
-              </a>
+              {canDownload ? (
+                <a href={`/api/projects/${projectId}/versions/${d.versions[0]?.id}`} className="flex h-16 items-center justify-center rounded bg-muted text-sm font-semibold text-ink-soft">
+                  {fileKind(d.name)}
+                </a>
+              ) : (
+                <span className="flex h-16 items-center justify-center rounded bg-muted text-sm font-semibold text-ink-soft">{fileKind(d.name)}</span>
+              )}
               <p className="truncate text-sm font-medium" title={d.name}>{d.name}</p>
+              {isViewable(d.contentType, d.name) && d.versions[0] && (
+                <Link href={viewHref(d.versions[0].id)} className="text-xs font-medium text-brand hover:underline" aria-label={`Open ${d.name} in the viewer`}>
+                  View
+                </Link>
+              )}
               <div className="flex items-center justify-between text-xs text-ink-soft">
                 <VersionDrawer name={d.name} versions={versionRows(d)} />
                 <span>{formatBytes(d.size)}</span>

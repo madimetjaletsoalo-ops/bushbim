@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": c.ct || "application/octet-stream",
       "Content-Length": String(size),
-      "Content-Disposition": contentDisposition(c.fn || "download"),
+      "Content-Disposition": c.inline ? "inline" : contentDisposition(c.fn || "download"),
       "Cache-Control": "private, no-store",
     },
   });

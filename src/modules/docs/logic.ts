@@ -65,6 +65,8 @@ export interface FlatFolder {
   parentId: string | null;
   name: string;
   root: RootKey | null;
+  /** shown only as the path to a shared subfolder; the member can't open it */
+  locked?: boolean;
 }
 
 export interface TreeNode extends FlatFolder {

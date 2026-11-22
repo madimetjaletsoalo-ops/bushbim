@@ -232,6 +232,7 @@ export async function removeMember(projectId: string, memberId: string) {
   await db.$transaction(async (tx) => {
     await tx.projectMember.delete({ where: { id: member.id } });
     await tx.servicePermission.deleteMany({ where: { projectId, subjectType: "USER", subjectId: member.userId } });
+    await tx.folderPermission.deleteMany({ where: { subjectType: "USER", subjectId: member.userId, folder: { projectId } } });
     await audit(tx, user.id, projectId, "member.removed", { email: member.user.email });
   });
   revalidatePath(`/projects/${projectId}/admin`, "layout");

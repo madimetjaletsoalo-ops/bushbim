@@ -76,6 +76,6 @@ Every module checks access through `can(member, service, action, grants)` in `sr
    - optional `SEED_DEMO=1`: loads the demo organisation (login `admin@bushbim.test` / `bushbim123`). Remove it, and change that password, before real use.
 3. File storage for Document Control (required on Vercel, which has no persistent disk). Any S3-compatible bucket works, including Supabase Storage (Project Settings → Storage → S3 connection):
    - `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
-   - `S3_ENDPOINT` for non-AWS providers (e.g. `https://<ref>.supabase.co/storage/v1/s3`); path-style addressing is then used automatically
+   - `S3_ENDPOINT` for non-AWS providers (e.g. `https://<ref>.storage.supabase.co/storage/v1/s3`, the direct storage host, which is faster for large files); path-style addressing is then used automatically
    - The bucket must allow CORS `PUT` and `GET` from the app's origin with the `Content-Type` header, because browsers upload straight to the bucket.
 4. Deploy. The `vercel-build` script runs `prisma migrate deploy` before `next build`, so the database schema is always up to date.

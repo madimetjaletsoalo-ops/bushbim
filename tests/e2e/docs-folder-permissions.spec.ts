@@ -88,7 +88,8 @@ test("private folders, inherited grants, overrides and server-side enforcement",
   await qs.getByTestId("folder-tree").getByRole("link", { name: "Commercial" }).click();
   await expect(qs.getByTestId("my-access")).toHaveText("Your access: View");
   await expect(qs.getByTestId("file-row")).toContainText("Valuation 03.pdf");
-  await expect(qs.getByTestId("file-row").locator("a")).toHaveCount(0);
+  await expect(qs.getByTestId("file-row").getByTestId("download-link")).toHaveCount(0);
+  await expect(qs.getByTestId("file-row").getByTestId("view-link")).toHaveCount(1); // View level can open the viewer
   await expect(qs.getByLabel("Choose files to upload")).toHaveCount(0);
   await expect(qs.getByTestId("folder-permissions")).toHaveCount(0);
   expect((await qs.request.get(downloadHref!, { maxRedirects: 0 })).status()).toBe(403);
@@ -120,7 +121,7 @@ test("private folders, inherited grants, overrides and server-side enforcement",
   await qs.getByLabel("Choose files to upload").setInputFiles([pdf("Valuation 04.pdf", "valuation four")]);
   await expect(qs.getByTestId("upload-list").getByText("Saved as V1")).toBeVisible();
   await expect(qs.getByTestId("file-row")).toHaveCount(2);
-  await expect(qs.getByTestId("file-row").first().locator("a")).toHaveCount(1); // Upload includes download
+  await expect(qs.getByTestId("file-row").first().getByTestId("download-link")).toHaveCount(1); // Upload includes download
   await expect(qs.getByText("New folder", { exact: true })).toHaveCount(0);
   await expect(qs.getByRole("button", { name: "Delete folder" })).toHaveCount(0);
   await expect(qs.getByText("Rename", { exact: true })).toHaveCount(0);

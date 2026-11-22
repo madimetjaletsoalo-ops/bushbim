@@ -11,11 +11,11 @@ The product owner can reorder, add or delete items at any time. Write each new i
   Done when: each project starts with a "Plans" and a "Project Files" root; users can create, rename and delete subfolders; upload files (presigned S3/MinIO, multiple files, progress bar); a new upload with the same name stacks as V2, V3…; the version history drawer can download any version; the list/grid views (as in the reference screenshot) sort by name, date and size; the left folder tree expands and collapses; access is gated by `can(member, "DOCS", …)`.
 - [x] **2. Folder permissions** (2026-11-22). Per-folder View / View+Download / Upload / Edit / Manage grants for project members, users, roles or companies; nearest grant wins down the tree; private folders via "Project members: No access"; enforced in every docs action and download; Permissions panel shows who has access and each member's result.
   Done when: levels View → View+Download → Upload → Edit → Manage can be granted per folder to a user, role or company; they are inherited by subfolders unless overridden; enforcement happens server-side on every docs action; the folder settings show who has access.
+- [x] **3. Viewer and markups** (2026-11-22). pdf.js viewer for PDFs and images with page navigation and zoom; pen, rectangle, cloud, arrow and text markups, private or published; per-page scale calibration with length and area measuring; ⭐ Export PDF flattens published markups (pdf-lib).
+  Done when: PDFs and images open in the browser viewer (pdf.js) with page navigation and zoom; markups (pen, rectangle, cloud, arrow, text) can be private or published; the scale can be calibrated and length and area measured; ⭐ a sheet can be exported as a PDF with its published markups flattened.
 
 ## Document Control
 
-- [ ] **3. Viewer and markups**
-  Done when: PDFs and images open in the browser viewer (pdf.js) with page navigation and zoom; markups (pen, rectangle, cloud, arrow, text) can be private or published; the scale can be calibrated and length and area measured; ⭐ a sheet can be exported as a PDF with its published markups flattened.
 - [ ] **4. Sheets and Sets**
   Done when: a multi-page PDF uploaded to Plans is split into sheets; sheet number and title are taken from a configurable title-block region (editable); sheets are grouped into Sets ("Tender", "IFC Rev B"), and the Folders/Sets toggle from the screenshot works; version comparison shows two versions side by side and as an overlay.
 - [ ] **7. Reviews and approval workflows**

@@ -47,6 +47,8 @@ model User {
   auditEvents  AuditEvent[]
   folders      Folder[]
   versions     DocumentVersion[]
+  markups      Markup[]
+  calibrations SheetCalibration[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -256,6 +258,8 @@ model DocumentVersion {
   uploadedById String?
   uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
+  markups      Markup[]
+  calibrations SheetCalibration[]
 
   @@unique([documentId, number])
 }
@@ -292,4 +296,55 @@ model FolderPermission {
 
   @@unique([folderId, subjectType, subjectId])
   @@index([folderId])
+}
+
+enum MarkupType {
+  PEN
+  RECT
+  CLOUD
+  ARROW
+  TEXT
+  LENGTH
+  AREA
+}
+
+enum MarkupStatus {
+  PRIVATE
+  PUBLISHED
+}
+
+/// A markup on one page of a document version. Coordinates are in page units:
+/// PDF points at 100% zoom, or image pixels.
+model Markup {
+  id        String          @id @default(cuid())
+  versionId String
+  version   DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  page      Int
+  type      MarkupType
+  /// [[x, y], ...] in page units
+  points    Json
+  color     String
+  text      String?
+  status    MarkupStatus    @default(PRIVATE)
+  authorId  String?
+  author    User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([versionId, page])
+}
+
+/// Drawing scale for one page of a version: `unitsPerPoint` real units per page unit.
+model SheetCalibration {
+  id            String          @id @default(cuid())
+  versionId     String
+  version       DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  page          Int
+  unitsPerPoint Float
+  unit          String
+  setById       String?
+  setBy         User?           @relation(fields: [setById], references: [id], onDelete: SetNull)
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([versionId, page])
 }

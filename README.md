@@ -11,7 +11,8 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Project Admin: projects, members, companies, roles, service permissions, activity log, CSV bulk invite, **add one person to many projects at once** | ✅ Built |
 | Document Control: Plans / Project Files folders, subfolders, multi-file upload with progress, automatic versioning (V2, V3…), version history with downloads, list/grid views with sorting | ✅ Built (item 1) |
 | Document Control: folder permissions (View → Manage per user, role or company, inherited by subfolders, private folders) | ✅ Built (item 2) |
-| Document Control: viewer and markups, sheets and sets, reviews, transmittals | Backlog items 3–4, 7–8 |
+| Document Control: in-browser viewer for PDFs and images (pages, zoom), markups (pen, rectangle, cloud, arrow, text) kept private or published, scale calibration with length and area measuring, **PDF export with published markups flattened** | ✅ Built (item 3) |
+| Document Control: sheets and sets, reviews, transmittals | Backlog items 4, 7–8 |
 | Field Management (issues, checklists, daily logs) | Backlog items 5–6, 9–10 |
 
 ## Stack
@@ -74,6 +75,7 @@ Document Control adds **folder permissions** on top (`src/modules/docs/folder-pe
 - A grant to "Project members", a user, a role or a company applies to that folder and its subfolders until a subfolder sets its own grant for the same subject. A member's level is the highest of the grants that apply to them.
 - Set "Project members" to "No access" on a folder to make it private, then grant who needs it. Project admins and Document Control Managers always have Manage.
 - The Plans and Project Files roots can't be renamed or deleted.
+- In the viewer, anyone with View can open a file and add private markups. Publishing markups and setting a page's scale need Upload; deleting someone else's markup needs Manage. Export PDF is a download, so it needs View + Download. View-only people can't download the original, but the viewer still sends the file to their browser to display it.
 
 Every module checks access through `can(member, service, action, grants)` in `src/lib/permissions.ts`.
 

@@ -1,6 +1,6 @@
 import "server-only";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -26,7 +26,10 @@ export interface PresignedPut {
 export interface Storage {
   kind: "s3" | "local";
   presignPut(key: string, contentType: string, size: number): Promise<PresignedPut>;
-  presignGet(key: string, fileName: string, contentType: string): Promise<string>;
+  /** `inline` asks the browser to display rather than save the file (used by the viewer). */
+  presignGet(key: string, fileName: string, contentType: string, inline?: boolean): Promise<string>;
+  /** Reads a whole object on the server (used by the PDF export). */
+  read(key: string): Promise<Uint8Array>;
   /** Size of a stored object, or null if it doesn't exist. */
   head(key: string): Promise<number | null>;
   remove(keys: string[]): Promise<void>;
@@ -50,12 +53,22 @@ function s3Storage(bucket: string): Storage {
       });
       return { url, headers: { "Content-Type": contentType } };
     },
-    async presignGet(key, fileName, contentType) {
+    async presignGet(key, fileName, contentType, inline) {
       return getSignedUrl(
         client,
-        new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: contentDisposition(fileName), ResponseContentType: contentType }),
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          ResponseContentDisposition: inline ? "inline" : contentDisposition(fileName),
+          ResponseContentType: contentType,
+        }),
         { expiresIn: PRESIGN_TTL },
       );
+    },
+    async read(key) {
+      const r = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      if (!r.Body) throw new Error("Empty object");
+      return r.Body.transformToByteArray();
     },
     async head(key) {
       try {
@@ -92,9 +105,12 @@ function localStorage(): Storage {
       const t = await signToken({ typ: "transfer", op: "put", key, max: size }, secretBytes(), PRESIGN_TTL);
       return { url: `/api/storage?t=${encodeURIComponent(t)}`, headers: { "Content-Type": contentType } };
     },
-    async presignGet(key, fileName, contentType) {
-      const t = await signToken({ typ: "transfer", op: "get", key, fn: fileName, ct: contentType }, secretBytes(), PRESIGN_TTL);
+    async presignGet(key, fileName, contentType, inline) {
+      const t = await signToken({ typ: "transfer", op: "get", key, fn: fileName, ct: contentType, inline }, secretBytes(), PRESIGN_TTL);
       return `/api/storage?t=${encodeURIComponent(t)}`;
+    },
+    async read(key) {
+      return new Uint8Array(await readFile(localPath(key)));
     },
     async head(key) {
       try {

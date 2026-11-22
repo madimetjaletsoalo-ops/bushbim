@@ -12,6 +12,7 @@ import { FolderPermissions } from "@/components/docs/FolderPermissions";
 import { getDocsContext } from "@/modules/docs/access";
 import { createFolder, deleteFolder, renameFolder } from "@/modules/docs/actions";
 import { FOLDER_LEVEL_LABELS, levelAtLeast } from "@/modules/docs/folder-permissions";
+import { isViewable } from "@/modules/docs/markup";
 import { ancestors, fileKind, formatBytes, parseSort, sortFolderNames, sortItems, type SortKey } from "@/modules/docs/logic";
 
 type Search = { view?: string; sort?: string; dir?: string };
@@ -62,7 +63,9 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
       uploadedBy: v.uploadedBy?.name ?? "Former member",
       createdAt: fmt.format(v.createdAt),
       downloadHref: canDownload ? `/api/projects/${projectId}/versions/${v.id}` : null,
+      viewHref: isViewable(v.contentType, v.fileName) ? `/projects/${projectId}/viewer/${v.id}` : null,
     }));
+  const viewHref = (versionId: string) => `/projects/${projectId}/viewer/${versionId}`;
   const folderHref = (id: string) => `/projects/${projectId}/docs/folders/${id}?view=${view}`;
   const empty = subfolders.length === 0 && sorted.length === 0;
 
@@ -179,14 +182,23 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="w-12 shrink-0 rounded bg-muted px-1 py-0.5 text-center text-[10px] font-semibold uppercase text-ink-soft">{fileKind(d.name)}</span>
                       {canDownload ? (
-                        <a href={`/api/projects/${projectId}/versions/${d.versions[0]?.id}`} className="break-all font-medium hover:underline">{d.name}</a>
+                        <a href={`/api/projects/${projectId}/versions/${d.versions[0]?.id}`} className="break-all font-medium hover:underline" data-testid="download-link">{d.name}</a>
                       ) : (
                         <span className="break-all font-medium">{d.name}</span>
                       )}
                     </div>
                     <p className="mt-1 text-xs text-ink-soft sm:hidden">{formatBytes(d.size)} · {fmtDate.format(d.updatedAt)}</p>
                   </td>
-                  <td className={td}><VersionDrawer name={d.name} versions={versionRows(d)} /></td>
+                  <td className={td}>
+                    <div className="flex items-center gap-2">
+                      <VersionDrawer name={d.name} versions={versionRows(d)} />
+                      {isViewable(d.contentType, d.name) && d.versions[0] && (
+                        <Link href={viewHref(d.versions[0].id)} className="text-xs font-medium text-brand hover:underline" aria-label={`Open ${d.name} in the viewer`} data-testid="view-link">
+                          View
+                        </Link>
+                      )}
+                    </div>
+                  </td>
                   <td className={`${td} hidden whitespace-nowrap sm:table-cell`}>{formatBytes(d.size)}</td>
                   <td className={`${td} hidden whitespace-nowrap md:table-cell`}>{fmt.format(d.updatedAt)}</td>
                   <td className={`${td} hidden lg:table-cell`}>{d.versions[0]?.uploadedBy?.name ?? "—"}</td>
@@ -222,6 +234,11 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
                 <span className="flex h-16 items-center justify-center rounded bg-muted text-sm font-semibold text-ink-soft">{fileKind(d.name)}</span>
               )}
               <p className="truncate text-sm font-medium" title={d.name}>{d.name}</p>
+              {isViewable(d.contentType, d.name) && d.versions[0] && (
+                <Link href={viewHref(d.versions[0].id)} className="text-xs font-medium text-brand hover:underline" aria-label={`Open ${d.name} in the viewer`}>
+                  View
+                </Link>
+              )}
               <div className="flex items-center justify-between text-xs text-ink-soft">
                 <VersionDrawer name={d.name} versions={versionRows(d)} />
                 <span>{formatBytes(d.size)}</span>

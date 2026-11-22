@@ -12,6 +12,8 @@ export interface VersionRow {
   createdAt: string; // preformatted in the project timezone
   /** null when the member may view but not download */
   downloadHref: string | null;
+  /** in-browser viewer link for PDFs and images */
+  viewHref?: string | null;
 }
 
 /** The "V3" badge opens a side drawer listing every version with a download link. */
@@ -62,6 +64,12 @@ export function VersionDrawer({ name, versions }: { name: string; versions: Vers
                       {v.createdAt} · {v.uploadedBy} · {formatBytes(v.size)}
                     </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                  {v.viewHref && (
+                    <a href={v.viewHref} className={btnGhost} aria-label={`View V${v.number}`}>
+                      View
+                    </a>
+                  )}
                   {v.downloadHref ? (
                     <a href={v.downloadHref} className={btnGhost} aria-label={`Download V${v.number}`}>
                       Download
@@ -69,6 +77,7 @@ export function VersionDrawer({ name, versions }: { name: string; versions: Vers
                   ) : (
                     <span className="text-xs text-ink-soft">View only</span>
                   )}
+                  </div>
                 </li>
               ))}
             </ol>

@@ -32,25 +32,27 @@ enum AccountRole {
 }
 
 model User {
-  id              String             @id @default(cuid())
-  email           String             @unique
-  name            String
+  id                   String                 @id @default(cuid())
+  email                String                 @unique
+  name                 String
   /// null until the invited user sets a password
-  passwordHash    String?
+  passwordHash         String?
   /// one-time token for the invite link; cleared once the password is set
-  inviteToken     String?            @unique
-  accountId       String
-  account         Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  accountRole     AccountRole        @default(USER)
-  createdAt       DateTime           @default(now())
-  memberships     ProjectMember[]
-  auditEvents     AuditEvent[]
-  folders         Folder[]
-  versions        DocumentVersion[]
-  markups         Markup[]
-  calibrations    SheetCalibration[]
-  reviewsStarted  Review[]
-  reviewDecisions ReviewDecision[]
+  inviteToken          String?                @unique
+  accountId            String
+  account              Account                @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountRole          AccountRole            @default(USER)
+  createdAt            DateTime               @default(now())
+  memberships          ProjectMember[]
+  auditEvents          AuditEvent[]
+  folders              Folder[]
+  versions             DocumentVersion[]
+  markups              Markup[]
+  calibrations         SheetCalibration[]
+  reviewsStarted       Review[]
+  reviewDecisions      ReviewDecision[]
+  transmittalsSent     Transmittal[]
+  transmittalsReceived TransmittalRecipient[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -110,6 +112,7 @@ model Project {
   titleBlock      TitleBlockSettings?
   reviewWorkflows ReviewWorkflow[]
   reviews         Review[]
+  transmittals    Transmittal[]
 
   @@unique([accountId, name])
 }
@@ -254,23 +257,24 @@ model Document {
 }
 
 model DocumentVersion {
-  id              String             @id @default(cuid())
-  documentId      String
-  document        Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  number          Int
+  id                   String                @id @default(cuid())
+  documentId           String
+  document             Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  number               Int
   /// object key in S3/MinIO (or the local storage directory)
-  storageKey      String             @unique
+  storageKey           String                @unique
   /// file name as uploaded for this version
-  fileName        String
-  size            Int
-  contentType     String
-  uploadedById    String?
-  uploadedBy      User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt       DateTime           @default(now())
-  markups         Markup[]
-  calibrations    SheetCalibration[]
-  sheets          Sheet[]
-  reviewDocuments ReviewDocument[]
+  fileName             String
+  size                 Int
+  contentType          String
+  uploadedById         String?
+  uploadedBy           User?                 @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt            DateTime              @default(now())
+  markups              Markup[]
+  calibrations         SheetCalibration[]
+  sheets               Sheet[]
+  reviewDocuments      ReviewDocument[]
+  transmittalDocuments TransmittalDocument[]
 
   @@unique([documentId, number])
 }
@@ -532,4 +536,78 @@ model ReviewDecision {
 
   @@unique([reviewDocumentId, step, reviewerId])
   @@index([reviewId, step])
+}
+
+// ---------- Transmittals ----------
+
+/// A set of document versions sent to members or external email addresses.
+/// Each recipient gets a no-login download link that stops working at `expiresAt` or when revoked.
+model Transmittal {
+  id         String                 @id @default(cuid())
+  projectId  String
+  project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// per-project sequence shown as T-1, T-2…
+  number     Int
+  subject    String
+  message    String?
+  senderId   String?
+  sender     User?                  @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime               @default(now())
+  documents  TransmittalDocument[]
+  recipients TransmittalRecipient[]
+  downloads  TransmittalDownload[]
+
+  @@unique([projectId, number])
+  @@index([projectId, createdAt])
+}
+
+/// A version included in a transmittal. Name and number are copied so the log
+/// still reads correctly if the file is later deleted (versionId then becomes null).
+model TransmittalDocument {
+  id            String                @id @default(cuid())
+  transmittalId String
+  transmittal   Transmittal           @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
+  versionId     String?
+  version       DocumentVersion?      @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  fileName      String
+  versionNumber Int
+  size          Int
+  downloads     TransmittalDownload[]
+
+  @@unique([transmittalId, versionId])
+  @@index([versionId])
+}
+
+/// Someone a transmittal was sent to: a project member (userId set) or an external email address.
+/// The download link is derived from the id and SESSION_SECRET, so no token is stored.
+model TransmittalRecipient {
+  id            String                @id @default(cuid())
+  transmittalId String
+  transmittal   Transmittal           @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// lower-cased
+  email         String
+  name          String?
+  firstOpenedAt DateTime?
+  downloads     TransmittalDownload[]
+
+  @@unique([transmittalId, email])
+  @@index([userId])
+}
+
+/// One download of one file through a recipient's link: the transmittal log.
+model TransmittalDownload {
+  id            String               @id @default(cuid())
+  transmittalId String
+  transmittal   Transmittal          @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
+  recipientId   String
+  recipient     TransmittalRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  documentId    String
+  document      TransmittalDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime             @default(now())
+
+  @@index([transmittalId, createdAt])
 }

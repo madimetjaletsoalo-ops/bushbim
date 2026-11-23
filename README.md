@@ -14,7 +14,7 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Document Control: in-browser viewer for PDFs and images (pages, zoom), markups (pen, rectangle, cloud, arrow, text) kept private or published, scale calibration with length and area measuring, **PDF export with published markups flattened** | ✅ Built (item 3) |
 | Document Control: sheets (each page of a PDF under Plans, number and title read from a configurable title-block region, editable), Sets (e.g. "Tender", "IFC Rev B") with a Folders/Sets toggle, version comparison side by side and as a red/blue overlay | ✅ Built (item 4) |
 | Document Control: reviews and approval workflows (1–5 steps, reviewers by user, role or company, renameable statuses, initiators), per-file decisions with comments and markups, **auto-start on upload to a folder**, **text search**, **approved files copied to a chosen folder**, **closed reviews exported to PDF with markups** | ✅ Built (item 7) |
-| Document Control: transmittals | Backlog item 8 |
+| Document Control: transmittals (send chosen versions to members or external emails, a no-login download link per recipient with an expiry, revoke, a log of who downloaded what and when, **text search of the log**) | ✅ Built (item 8) |
 | Field Management (issues, checklists, daily logs) | Backlog items 5–6, 9–10 |
 
 ## Stack
@@ -52,10 +52,12 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/transmittals/   Transmittals: recipient parsing, signed link tokens, expiry and search (pure + unit tested), server actions, public link resolver
 src/modules/reviews/        Reviews: workflow/step logic (pure + unit tested), server actions, auto-start, copy approved, PDF export
 src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
-src/app/(app)/projects/[projectId]/{admin,docs,reviews,field}/   modules
+src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,field}/   modules
+src/app/(public)/t/[token]  no-login transmittal download page (files via /api/t/[token]/[fileId])
 ```
 
 ## Permission model
@@ -107,3 +109,12 @@ Reviews (`src/modules/reviews/`):
 - A reviewer of the current step picks a status and comment for every file. A step's result for a file is the worst status it received; when the last step completes the review closes with that result.
 - Reviewers open files in the viewer through their normal folder access. While they are reviewing a file they may publish markups on it even without Upload.
 - A review is visible to its initiator, anyone named as a reviewer, Document Control Managers, and anyone who can view all its files. Export PDF (closed reviews) includes a file's pages only where the user has View + Download.
+
+Transmittals (`src/modules/transmittals/`):
+
+- Sending needs Document Control Creator and View + Download on every file's folder, because a transmittal hands files to people outside the app. Any version can be sent, not only the latest. Folder pages with files have a "Send transmittal" shortcut.
+- Recipients are project members and/or any email addresses. Each one gets their own link, `/t/<recipient id>.<signature>`, which works without signing in until the expiry (1–30 days, default 14) or until the sender or a manager revokes the transmittal. The signature is an HMAC of the recipient id with `SESSION_SECRET`, so no link secret is stored in the database. Changing `SESSION_SECRET` invalidates every outstanding link.
+- Email delivery arrives with backlog item 13. Until then the sender copies each recipient's link from the transmittal page.
+- Every download through a link is recorded (recipient, file and version, time), along with when each recipient first opened their link. A download by a project member also goes in the activity log. External recipients have no user account, so their downloads are recorded only in the transmittal log.
+- The log and each transmittal are visible to the sender, project admins, Document Control Managers, and member recipients. Member recipients see only their own link and downloads. The log searches subject, message, file names, sender and recipients, and `T-n` numbers.
+- File names and version numbers are copied into the transmittal, so the log still reads correctly if a file is deleted later. The file then shows as no longer available.

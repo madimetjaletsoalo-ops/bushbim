@@ -20,7 +20,7 @@ The product owner can reorder, add or delete items at any time. Write each new i
 
 ## Document Control
 
-- [ ] **8. Transmittals**
+- [x] **8. Transmittals** (2026-11-23). Send chosen document versions (latest or earlier) to members and external emails; each recipient gets their own no-login link with a 1–30 day expiry, revocable; every download is logged with who, what and when; ⭐ the log has a text search.
   Done when: users can send selected document versions to members or external email addresses; recipients get a no-login download link with an expiry; the transmittal log records who downloaded what and when; ⭐ the log has a text search.
 
 ## Field Management

@@ -8,6 +8,7 @@ import { Uploader } from "@/components/docs/Uploader";
 import { VersionDrawer, type VersionRow } from "@/components/docs/VersionDrawer";
 import { btnDanger, btnGhost, card, input, td, th } from "@/components/ui";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 import { FolderPermissions } from "@/components/docs/FolderPermissions";
 import { getDocsContext } from "@/modules/docs/access";
 import { createFolder, deleteFolder, renameFolder } from "@/modules/docs/actions";
@@ -91,6 +92,11 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
             {sorted.length > 0 && (
               <Link href={`/projects/${projectId}/reviews/new?folderId=${folderId}`} className={btnGhost} data-testid="submit-for-review">
                 Submit for review
+              </Link>
+            )}
+            {sorted.length > 0 && levelAtLeast(level, "VIEW_DOWNLOAD") && can(docsCtx.member, "DOCS", "create", docsCtx.grants) && (
+              <Link href={`/projects/${projectId}/transmittals/new?folderId=${folderId}`} className={btnGhost} data-testid="send-transmittal">
+                Send transmittal
               </Link>
             )}
             {canUpload && <Uploader projectId={projectId} folderId={folderId} />}

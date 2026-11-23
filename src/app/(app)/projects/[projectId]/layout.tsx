@@ -15,6 +15,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
           <nav aria-label="Modules" className="-mb-px flex overflow-x-auto">
             {can(member, "DOCS", "view", grants) && <NavLink href={`${base}/docs`}>Document Control</NavLink>}
             {can(member, "DOCS", "view", grants) && <NavLink href={`${base}/reviews`}>Reviews</NavLink>}
+            {can(member, "DOCS", "view", grants) && <NavLink href={`${base}/transmittals`}>Transmittals</NavLink>}
             {showField && <NavLink href={`${base}/field`}>Field Management</NavLink>}
             {isAdmin && <NavLink href={`${base}/admin`}>Project Admin</NavLink>}
           </nav>

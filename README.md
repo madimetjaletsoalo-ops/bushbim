@@ -15,7 +15,8 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Document Control: sheets (each page of a PDF under Plans, number and title read from a configurable title-block region, editable), Sets (e.g. "Tender", "IFC Rev B") with a Folders/Sets toggle, version comparison side by side and as a red/blue overlay | ✅ Built (item 4) |
 | Document Control: reviews and approval workflows (1–5 steps, reviewers by user, role or company, renameable statuses, initiators), per-file decisions with comments and markups, **auto-start on upload to a folder**, **text search**, **approved files copied to a chosen folder**, **closed reviews exported to PDF with markups** | ✅ Built (item 7) |
 | Document Control: transmittals (send chosen versions to members or external emails, a no-login download link per recipient with an expiry, revoke, a log of who downloaded what and when, **text search of the log**) | ✅ Built (item 8) |
-| Field Management (issues, checklists, daily logs) | Backlog items 5–6, 9–10 |
+| Field Management: issues (type and subtype, assignee by user, role or company, due date, location tree, root cause, custom attributes, watchers, comments, activity), **custom statuses per project with sub-statuses**, filter panel, coloured status-bar table, CSV export; Creators edit only their own issues, assignees update status | ✅ Built (item 5) |
+| Field Management (issue pins and photos, checklists, daily logs) | Backlog items 6, 9–10 |
 
 ## Stack
 
@@ -52,11 +53,12 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/issues/         Issues: access rules, statuses, filters, dates, attributes and CSV (pure + unit tested), server actions, defaults
 src/modules/transmittals/   Transmittals: recipient parsing, signed link tokens, expiry and search (pure + unit tested), server actions, public link resolver
 src/modules/reviews/        Reviews: workflow/step logic (pure + unit tested), server actions, auto-start, copy approved, PDF export
 src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
-src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,field}/   modules
+src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,field}/   modules
 src/app/(public)/t/[token]  no-login transmittal download page (files via /api/t/[token]/[fileId])
 ```
 
@@ -118,3 +120,12 @@ Transmittals (`src/modules/transmittals/`):
 - Every download through a link is recorded (recipient, file and version, time), along with when each recipient first opened their link. A download by a project member also goes in the activity log. External recipients have no user account, so their downloads are recorded only in the transmittal log.
 - The log and each transmittal are visible to the sender, project admins, Document Control Managers, and member recipients. Member recipients see only their own link and downloads. The log searches subject, message, file names, sender and recipients, and `T-n` numbers.
 - File names and version numbers are copied into the transmittal, so the log still reads correctly if a file is deleted later. The file then shows as no longer available.
+
+Issues (`src/modules/issues/`):
+
+- Viewers see issues and can comment and watch. Creators also raise issues, and edit every field of the issues **they created**. Issues Managers (and project admins) edit any issue and open **Settings**.
+- The assignee (the user, any member of the role, or anyone in the company) can change an issue's status even as a Viewer, with an optional comment.
+- ⭐ Statuses are per project. Each project starts with Draft, Open, Answered, Work completed, Ready to inspect, Not approved, In dispute, Closed and Void; Managers can rename, recolour, reorder and add statuses, nest one level of sub-statuses (filtering on a status includes its sub-statuses), and choose the status new issues start in. A **closed** status stamps `closedAt` and stops the overdue flag; issues in a **draft** status are visible only to their creator and Managers. A status in use can't be deleted.
+- Managers also maintain types and subtypes (deactivated ones stay on existing issues), root causes, custom attributes (list, text, number or date) and the location tree (Site › Zone › Villa › Room; CSV import comes with backlog item 16).
+- The list has a text/#ID search and a filter panel (type, status, created by, created on, assignee, custom attributes). Export CSV downloads exactly the filtered list, with custom attributes as extra columns; cells that a spreadsheet would treat as formulas are prefixed with `'`.
+- Due and created-on dates follow the project's time zone. Every change is in the issue's activity panel and the project activity log.

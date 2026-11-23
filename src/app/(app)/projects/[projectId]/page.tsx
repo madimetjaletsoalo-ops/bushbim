@@ -6,6 +6,7 @@ export default async function ProjectHome({ params }: { params: Promise<{ projec
   const { projectId } = await params;
   const { member, grants, isAdmin } = await getProjectContext(projectId);
   if (can(member, "DOCS", "view", grants)) redirect(`/projects/${projectId}/docs`);
+  if (can(member, "ISSUES", "view", grants)) redirect(`/projects/${projectId}/issues`);
   if (isAdmin) redirect(`/projects/${projectId}/admin/members`);
   redirect(`/projects/${projectId}/field`);
 }

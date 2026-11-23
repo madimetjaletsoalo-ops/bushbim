@@ -15,11 +15,11 @@ The product owner can reorder, add or delete items at any time. Write each new i
   Done when: PDFs and images open in the browser viewer (pdf.js) with page navigation and zoom; markups (pen, rectangle, cloud, arrow, text) can be private or published; the scale can be calibrated and length and area measured; ⭐ a sheet can be exported as a PDF with its published markups flattened.
 - [x] **4. Sheets and Sets** (2026-11-22). Every page of a PDF (or an image) under Plans becomes a sheet; number and title read server-side (pdf.js) from configurable title-block boxes, editable, with “Re-read all sheets”; Sets snapshot sheet versions; Folders/Sets toggle; compare any sheet with its previous version side by side or as a red/blue overlay.
   Done when: a multi-page PDF uploaded to Plans is split into sheets; sheet number and title are taken from a configurable title-block region (editable); sheets are grouped into Sets ("Tender", "IFC Rev B"), and the Folders/Sets toggle from the screenshot works; version comparison shows two versions side by side and as an overlay.
+- [x] **7. Reviews and approval workflows** (2026-11-22). Workflows of 1–5 steps (reviewers by user/role/company, any-one or all, days per step), renameable approval statuses, initiators; reviews started by hand or ⭐ automatically on upload to a folder; per-file decisions with comments, reviewers can publish markups; ⭐ text search; ⭐ approved files copied to a chosen folder; ⭐ closed reviews export to PDF with markups.
+  Done when: admins define workflows (1–5 steps, reviewers per step, approval statuses, initiators); files are submitted for review; each reviewer marks Approved, Approved with comments, Revise & resubmit or Rejected, with comments and markups; reviews can auto-start on upload to a chosen folder; ⭐ reviews have a text search; ⭐ an optional "move approved files to folder X" step; ⭐ a closed review can be exported with its markups.
 
 ## Document Control
 
-- [ ] **7. Reviews and approval workflows**
-  Done when: admins define workflows (1–5 steps, reviewers per step, approval statuses, initiators); files are submitted for review; each reviewer marks Approved, Approved with comments, Revise & resubmit or Rejected, with comments and markups; reviews can auto-start on upload to a chosen folder; ⭐ reviews have a text search; ⭐ an optional "move approved files to folder X" step; ⭐ a closed review can be exported with its markups.
 - [ ] **8. Transmittals**
   Done when: users can send selected document versions to members or external email addresses; recipients get a no-login download link with an expiry; the transmittal log records who downloaded what and when; ⭐ the log has a text search.
 

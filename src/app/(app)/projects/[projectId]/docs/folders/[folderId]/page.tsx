@@ -88,6 +88,11 @@ export default async function FolderPage({ params, searchParams }: { params: Pro
           <h2 className="text-xl font-semibold">{folder.name}</h2>
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs text-ink-soft" data-testid="my-access">Your access: {FOLDER_LEVEL_LABELS[level]}</span>
+            {sorted.length > 0 && (
+              <Link href={`/projects/${projectId}/reviews/new?folderId=${folderId}`} className={btnGhost} data-testid="submit-for-review">
+                Submit for review
+              </Link>
+            )}
             {canUpload && <Uploader projectId={projectId} folderId={folderId} />}
           </div>
         </div>

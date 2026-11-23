@@ -13,7 +13,8 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Document Control: folder permissions (View → Manage per user, role or company, inherited by subfolders, private folders) | ✅ Built (item 2) |
 | Document Control: in-browser viewer for PDFs and images (pages, zoom), markups (pen, rectangle, cloud, arrow, text) kept private or published, scale calibration with length and area measuring, **PDF export with published markups flattened** | ✅ Built (item 3) |
 | Document Control: sheets (each page of a PDF under Plans, number and title read from a configurable title-block region, editable), Sets (e.g. "Tender", "IFC Rev B") with a Folders/Sets toggle, version comparison side by side and as a red/blue overlay | ✅ Built (item 4) |
-| Document Control: reviews, transmittals | Backlog items 7–8 |
+| Document Control: reviews and approval workflows (1–5 steps, reviewers by user, role or company, renameable statuses, initiators), per-file decisions with comments and markups, **auto-start on upload to a folder**, **text search**, **approved files copied to a chosen folder**, **closed reviews exported to PDF with markups** | ✅ Built (item 7) |
+| Document Control: transmittals | Backlog item 8 |
 | Field Management (issues, checklists, daily logs) | Backlog items 5–6, 9–10 |
 
 ## Stack
@@ -51,9 +52,10 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/reviews/        Reviews: workflow/step logic (pure + unit tested), server actions, auto-start, copy approved, PDF export
 src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
-src/app/(app)/projects/[projectId]/{admin,docs,field}/   modules
+src/app/(app)/projects/[projectId]/{admin,docs,reviews,field}/   modules
 ```
 
 ## Permission model
@@ -97,3 +99,11 @@ Every module checks access through `can(member, service, action, grants)` in `sr
    - `S3_ENDPOINT` for non-AWS providers (e.g. `https://<ref>.storage.supabase.co/storage/v1/s3`, the direct storage host, which is faster for large files); path-style addressing is then used automatically
    - The bucket must allow CORS `PUT` and `GET` from the app's origin with the `Content-Type` header, because browsers upload straight to the bucket.
 4. Deploy. The `vercel-build` script runs `prisma migrate deploy` before `next build`, so the database schema is always up to date.
+
+Reviews (`src/modules/reviews/`):
+
+- Project admins and Document Control Managers define workflows: 1–5 steps, each with reviewers (people, roles or companies), "any one responds" or "all respond", and days to review; which of Approved / Approved with comments / Revise & resubmit / Rejected are offered and what they're called; who may start reviews (none chosen: any Document Control Creator); an optional folder whose uploads start a review automatically; and an optional folder that approved files are copied to when the review closes. Used workflows can be deactivated but not deleted.
+- Starting a review needs View on every file's folder. Each step must have at least one reviewer who can open Document Control.
+- A reviewer of the current step picks a status and comment for every file. A step's result for a file is the worst status it received; when the last step completes the review closes with that result.
+- Reviewers open files in the viewer through their normal folder access. While they are reviewing a file they may publish markups on it even without Upload.
+- A review is visible to its initiator, anyone named as a reviewer, Document Control Managers, and anyone who can view all its files. Export PDF (closed reviews) includes a file's pages only where the user has View + Download.

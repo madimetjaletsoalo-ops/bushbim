@@ -32,45 +32,47 @@ enum AccountRole {
 }
 
 model User {
-  id           String          @id @default(cuid())
-  email        String          @unique
-  name         String
+  id              String             @id @default(cuid())
+  email           String             @unique
+  name            String
   /// null until the invited user sets a password
-  passwordHash String?
+  passwordHash    String?
   /// one-time token for the invite link; cleared once the password is set
-  inviteToken  String?         @unique
-  accountId    String
-  account      Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  accountRole  AccountRole     @default(USER)
-  createdAt    DateTime        @default(now())
-  memberships  ProjectMember[]
-  auditEvents  AuditEvent[]
-  folders      Folder[]
-  versions     DocumentVersion[]
-  markups      Markup[]
-  calibrations SheetCalibration[]
+  inviteToken     String?            @unique
+  accountId       String
+  account         Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountRole     AccountRole        @default(USER)
+  createdAt       DateTime           @default(now())
+  memberships     ProjectMember[]
+  auditEvents     AuditEvent[]
+  folders         Folder[]
+  versions        DocumentVersion[]
+  markups         Markup[]
+  calibrations    SheetCalibration[]
+  reviewsStarted  Review[]
+  reviewDecisions ReviewDecision[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
 model Company {
-  id          String          @id @default(cuid())
-  accountId   String
-  account     Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name        String
-  trade       String?
-  country     String?
-  createdAt   DateTime        @default(now())
-  members     ProjectMember[]
+  id        String          @id @default(cuid())
+  accountId String
+  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name      String
+  trade     String?
+  country   String?
+  createdAt DateTime        @default(now())
+  members   ProjectMember[]
 
   @@unique([accountId, name])
 }
 
 model Role {
-  id        String           @id @default(cuid())
+  id        String       @id @default(cuid())
   accountId String
-  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   name      String
-  createdAt DateTime         @default(now())
+  createdAt DateTime     @default(now())
   members   MemberRole[]
 
   @@unique([accountId, name])
@@ -82,30 +84,32 @@ enum ProjectStatus {
 }
 
 model Project {
-  id          String              @id @default(cuid())
-  accountId   String
-  account     Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name        String
-  code        String?
-  type        String?
-  location    String?
-  country     String?
-  currency    String              @default("ZAR")
-  timezone    String              @default("Africa/Johannesburg")
-  startDate   DateTime?
-  endDate     DateTime?
-  status      ProjectStatus       @default(ACTIVE)
+  id              String              @id @default(cuid())
+  accountId       String
+  account         Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name            String
+  code            String?
+  type            String?
+  location        String?
+  country         String?
+  currency        String              @default("ZAR")
+  timezone        String              @default("Africa/Johannesburg")
+  startDate       DateTime?
+  endDate         DateTime?
+  status          ProjectStatus       @default(ACTIVE)
   /// cover photo shown in the project list, e.g. "/projects/kruger-lodge-villas.webp"
-  coverImage  String?
-  createdAt   DateTime            @default(now())
-  members     ProjectMember[]
-  permissions ServicePermission[]
-  auditEvents AuditEvent[]
-  folders     Folder[]
-  documents   Document[]
-  sheets      Sheet[]
-  sheetSets   SheetSet[]
-  titleBlock  TitleBlockSettings?
+  coverImage      String?
+  createdAt       DateTime            @default(now())
+  members         ProjectMember[]
+  permissions     ServicePermission[]
+  auditEvents     AuditEvent[]
+  folders         Folder[]
+  documents       Document[]
+  sheets          Sheet[]
+  sheetSets       SheetSet[]
+  titleBlock      TitleBlockSettings?
+  reviewWorkflows ReviewWorkflow[]
+  reviews         Review[]
 
   @@unique([accountId, name])
 }
@@ -205,20 +209,22 @@ enum FolderRoot {
 
 /// A folder in a project's document tree. Root folders have `root` set and no parent.
 model Folder {
-  id          String      @id @default(cuid())
-  projectId   String
-  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parentId    String?
-  parent      Folder?     @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children    Folder[]    @relation("FolderTree")
-  root        FolderRoot?
-  name        String
-  createdById String?
-  createdBy   User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  documents   Document[]
-  permissions FolderPermission[]
+  id                 String             @id @default(cuid())
+  projectId          String
+  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId           String?
+  parent             Folder?            @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children           Folder[]           @relation("FolderTree")
+  root               FolderRoot?
+  name               String
+  createdById        String?
+  createdBy          User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  documents          Document[]
+  permissions        FolderPermission[]
+  autoStartWorkflows ReviewWorkflow[]   @relation("WorkflowAutoStart")
+  approvedWorkflows  ReviewWorkflow[]   @relation("WorkflowApproved")
 
   @@unique([projectId, root])
   @@unique([parentId, name])
@@ -227,43 +233,44 @@ model Folder {
 
 /// A named file in a folder. Uploading the same name again stacks a new version.
 model Document {
-  id              String            @id @default(cuid())
-  projectId       String
-  project         Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  folderId        String
-  folder          Folder            @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  name            String
+  id             String            @id @default(cuid())
+  projectId      String
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folderId       String
+  folder         Folder            @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  name           String
   /// lower-cased name: "Site Plan.pdf" and "site plan.PDF" stack as one document
-  nameKey         String
+  nameKey        String
   /// latest version number and its size/type, kept here for listing and sorting
-  currentVersion  Int               @default(1)
-  size            Int               @default(0)
-  contentType     String            @default("application/octet-stream")
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @default(now())
-  versions        DocumentVersion[]
+  currentVersion Int               @default(1)
+  size           Int               @default(0)
+  contentType    String            @default("application/octet-stream")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @default(now())
+  versions       DocumentVersion[]
 
   @@unique([folderId, nameKey])
   @@index([projectId])
 }
 
 model DocumentVersion {
-  id           String   @id @default(cuid())
-  documentId   String
-  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  number       Int
+  id              String             @id @default(cuid())
+  documentId      String
+  document        Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  number          Int
   /// object key in S3/MinIO (or the local storage directory)
-  storageKey   String   @unique
+  storageKey      String             @unique
   /// file name as uploaded for this version
-  fileName     String
-  size         Int
-  contentType  String
-  uploadedById String?
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-  markups      Markup[]
-  calibrations SheetCalibration[]
-  sheets       Sheet[]
+  fileName        String
+  size            Int
+  contentType     String
+  uploadedById    String?
+  uploadedBy      User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+  markups         Markup[]
+  calibrations    SheetCalibration[]
+  sheets          Sheet[]
+  reviewDocuments ReviewDocument[]
 
   @@unique([documentId, number])
 }
@@ -403,4 +410,126 @@ model TitleBlockSettings {
   numberRegion Json
   titleRegion  Json
   updatedAt    DateTime @updatedAt
+}
+
+// ---------- Reviews ----------
+
+/// Ordered from best to worst; a step's result for a file is the worst decision it got.
+enum ReviewOutcome {
+  APPROVED
+  APPROVED_WITH_COMMENTS
+  REVISE_RESUBMIT
+  REJECTED
+}
+
+enum ReviewStatus {
+  OPEN
+  CLOSED
+}
+
+/// ANY: the first reviewer to respond completes the step. ALL: every reviewer must respond.
+enum ReviewStepMode {
+  ANY
+  ALL
+}
+
+/// An approval workflow defined by a project admin: 1–5 steps, who may start it, and options.
+model ReviewWorkflow {
+  id                String               @id @default(cuid())
+  projectId         String
+  project           Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  /// approval statuses reviewers can pick: [{ code: ReviewOutcome, label: string }]
+  statuses          Json
+  /// who may start reviews: ["USER:id", "ROLE:id", "COMPANY:id"]; empty = any Document Control Creator
+  initiators        Json                 @default("[]")
+  /// uploads to this folder start a review automatically
+  autoStartFolderId String?
+  autoStartFolder   Folder?              @relation("WorkflowAutoStart", fields: [autoStartFolderId], references: [id], onDelete: SetNull)
+  /// approved files are copied here when the review closes
+  approvedFolderId  String?
+  approvedFolder    Folder?              @relation("WorkflowApproved", fields: [approvedFolderId], references: [id], onDelete: SetNull)
+  active            Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  steps             ReviewWorkflowStep[]
+  reviews           Review[]
+
+  @@unique([projectId, name])
+  @@index([autoStartFolderId])
+}
+
+model ReviewWorkflowStep {
+  id         String         @id @default(cuid())
+  workflowId String
+  workflow   ReviewWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  /// 1-based
+  order      Int
+  name       String
+  /// ["USER:id", "ROLE:id", "COMPANY:id"]
+  reviewers  Json
+  mode       ReviewStepMode @default(ANY)
+  /// days allowed for this step, used for the due date
+  days       Int            @default(5)
+
+  @@unique([workflowId, order])
+}
+
+model Review {
+  id          String           @id @default(cuid())
+  projectId   String
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowId  String
+  workflow    ReviewWorkflow   @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  /// per-project sequence shown as #1, #2…
+  number      Int
+  name        String
+  status      ReviewStatus     @default(OPEN)
+  currentStep Int              @default(1)
+  stepDueAt   DateTime?
+  initiatorId String?
+  initiator   User?            @relation(fields: [initiatorId], references: [id], onDelete: SetNull)
+  autoStarted Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  closedAt    DateTime?
+  documents   ReviewDocument[]
+  decisions   ReviewDecision[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+}
+
+/// A document version under review, with its final outcome once the review closes.
+model ReviewDocument {
+  id              String           @id @default(cuid())
+  reviewId        String
+  review          Review           @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  versionId       String
+  version         DocumentVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  outcome         ReviewOutcome?
+  /// the copy made in the workflow's "approved" folder, if any
+  copiedVersionId String?
+  decisions       ReviewDecision[]
+
+  @@unique([reviewId, versionId])
+  @@index([versionId])
+}
+
+/// One reviewer's decision on one file at one step.
+model ReviewDecision {
+  id               String         @id @default(cuid())
+  reviewId         String
+  review           Review         @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewDocumentId String
+  reviewDocument   ReviewDocument @relation(fields: [reviewDocumentId], references: [id], onDelete: Cascade)
+  step             Int
+  reviewerId       String
+  reviewer         User           @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  outcome          ReviewOutcome
+  comment          String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([reviewDocumentId, step, reviewerId])
+  @@index([reviewId, step])
 }

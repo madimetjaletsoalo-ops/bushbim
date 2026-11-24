@@ -64,7 +64,7 @@ export const getIssuesContext = cache(async (projectId: string) => {
 export type IssuesContext = Awaited<ReturnType<typeof getIssuesContext>>;
 
 /** "Site › Zone A › Villa 3" for every location, sorted by path. */
-function locationPaths(locations: { id: string; parentId: string | null; name: string }[]) {
+export function locationPaths(locations: { id: string; parentId: string | null; name: string }[]) {
   const byId = new Map(locations.map((l) => [l.id, l]));
   const path = (id: string) => {
     const parts: string[] = [];

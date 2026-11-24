@@ -5,11 +5,8 @@ export default async function FieldPage({ params }: { params: Promise<{ projectI
   await getProjectContext((await params).projectId);
   return (
     <ComingSoon
-      title="Field Management"
-      items={[
-        "Checklists from templates (quality, safety, snagging, commissioning)",
-        "Daily Logs with weather, labour per company and subcontractor input",
-      ]}
+      title="Daily Logs"
+      items={["Daily Logs with weather, labour per company and subcontractor input"]}
     />
   );
 }

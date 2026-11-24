@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ConfirmButton } from "@/components/docs/ConfirmButton";
+import { checklistLabel } from "@/modules/checklists/logic";
 import { issueLabel } from "@/modules/issues/logic";
 import { deletePhoto } from "@/modules/issues/media-actions";
 
@@ -12,6 +13,7 @@ export type GridPhoto = {
   createdAt: Date;
   uploadedBy: { name: string } | null;
   issue?: { id: string; number: number; title: string } | null;
+  checklist?: { id: string; number: number; title: string } | null;
   canDelete: boolean;
 };
 
@@ -41,6 +43,10 @@ export function PhotoGrid({ projectId, photos, timezone, showIssue }: { projectI
               (p.issue ? (
                 <Link href={`/projects/${projectId}/issues/${p.issue.id}`} className="block truncate font-medium text-brand hover:underline" data-testid="photo-issue">
                   {issueLabel(p.issue.number)} {p.issue.title}
+                </Link>
+              ) : p.checklist ? (
+                <Link href={`/projects/${projectId}/checklists/${p.checklist.id}`} className="block truncate font-medium text-brand hover:underline" data-testid="photo-checklist">
+                  {checklistLabel(p.checklist.number)} {p.checklist.title}
                 </Link>
               ) : (
                 <p className="text-ink-soft">Project photo</p>

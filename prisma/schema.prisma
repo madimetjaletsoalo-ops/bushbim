@@ -58,6 +58,10 @@ model User {
   issueComments        IssueComment[]
   issuePins            IssuePin[]
   photos               Photo[]
+  checklistTemplates   ChecklistTemplate[]
+  checklistsCreated    Checklist[]            @relation("ChecklistsCreated")
+  checklistsCompleted  Checklist[]            @relation("ChecklistsCompleted")
+  checklistAnswers     ChecklistItem[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -91,40 +95,42 @@ enum ProjectStatus {
 }
 
 model Project {
-  id              String              @id @default(cuid())
-  accountId       String
-  account         Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name            String
-  code            String?
-  type            String?
-  location        String?
-  country         String?
-  currency        String              @default("ZAR")
-  timezone        String              @default("Africa/Johannesburg")
-  startDate       DateTime?
-  endDate         DateTime?
-  status          ProjectStatus       @default(ACTIVE)
+  id                 String              @id @default(cuid())
+  accountId          String
+  account            Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name               String
+  code               String?
+  type               String?
+  location           String?
+  country            String?
+  currency           String              @default("ZAR")
+  timezone           String              @default("Africa/Johannesburg")
+  startDate          DateTime?
+  endDate            DateTime?
+  status             ProjectStatus       @default(ACTIVE)
   /// cover photo shown in the project list, e.g. "/projects/kruger-lodge-villas.webp"
-  coverImage      String?
-  createdAt       DateTime            @default(now())
-  members         ProjectMember[]
-  permissions     ServicePermission[]
-  auditEvents     AuditEvent[]
-  folders         Folder[]
-  documents       Document[]
-  sheets          Sheet[]
-  sheetSets       SheetSet[]
-  titleBlock      TitleBlockSettings?
-  reviewWorkflows ReviewWorkflow[]
-  reviews         Review[]
-  transmittals    Transmittal[]
-  locations       Location[]
-  issueTypes      IssueType[]
-  issueStatuses   IssueStatus[]
-  issueRootCauses IssueRootCause[]
-  issueAttributes IssueAttribute[]
-  issues          Issue[]
-  photos          Photo[]
+  coverImage         String?
+  createdAt          DateTime            @default(now())
+  members            ProjectMember[]
+  permissions        ServicePermission[]
+  auditEvents        AuditEvent[]
+  folders            Folder[]
+  documents          Document[]
+  sheets             Sheet[]
+  sheetSets          SheetSet[]
+  titleBlock         TitleBlockSettings?
+  reviewWorkflows    ReviewWorkflow[]
+  reviews            Review[]
+  transmittals       Transmittal[]
+  locations          Location[]
+  issueTypes         IssueType[]
+  issueStatuses      IssueStatus[]
+  issueRootCauses    IssueRootCause[]
+  issueAttributes    IssueAttribute[]
+  issues             Issue[]
+  photos             Photo[]
+  checklistTemplates ChecklistTemplate[]
+  checklists         Checklist[]
 
   @@unique([accountId, name])
 }
@@ -629,15 +635,16 @@ model TransmittalDownload {
 
 /// A place in the project: Site → Zone → Villa/Suite → Room. Item 16 adds CSV import.
 model Location {
-  id        String     @id @default(cuid())
-  projectId String
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parentId  String?
-  parent    Location?  @relation("LocationTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Location[] @relation("LocationTree")
-  name      String
-  createdAt DateTime   @default(now())
-  issues    Issue[]
+  id         String      @id @default(cuid())
+  projectId  String
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId   String?
+  parent     Location?   @relation("LocationTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Location[]  @relation("LocationTree")
+  name       String
+  createdAt  DateTime    @default(now())
+  issues     Issue[]
+  checklists Checklist[]
 
   @@unique([projectId, parentId, name])
   @@index([projectId])
@@ -726,38 +733,40 @@ model IssueAttribute {
 }
 
 model Issue {
-  id           String          @id @default(cuid())
-  projectId    String
-  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id            String          @id @default(cuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   /// per-project sequence shown as #1, #2…
-  number       Int
-  title        String
-  description  String?
-  typeId       String?
-  type         IssueType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
-  subtypeId    String?
-  subtype      IssueSubtype?   @relation(fields: [subtypeId], references: [id], onDelete: SetNull)
-  statusId     String
-  status       IssueStatus     @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  number        Int
+  title         String
+  description   String?
+  typeId        String?
+  type          IssueType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  subtypeId     String?
+  subtype       IssueSubtype?   @relation(fields: [subtypeId], references: [id], onDelete: SetNull)
+  statusId      String
+  status        IssueStatus     @relation(fields: [statusId], references: [id], onDelete: Restrict)
   /// assigned to a user, a role or a company
-  assigneeType SubjectType?
-  assigneeId   String?
-  dueDate      DateTime?       @db.Date
-  locationId   String?
-  location     Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  rootCauseId  String?
-  rootCause    IssueRootCause? @relation(fields: [rootCauseId], references: [id], onDelete: SetNull)
+  assigneeType  SubjectType?
+  assigneeId    String?
+  dueDate       DateTime?       @db.Date
+  locationId    String?
+  location      Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  rootCauseId   String?
+  rootCause     IssueRootCause? @relation(fields: [rootCauseId], references: [id], onDelete: SetNull)
   /// custom attribute values: { [IssueAttribute.id]: string }
-  attributes   Json            @default("{}")
-  createdById  String?
-  createdBy    User?           @relation("IssuesCreated", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  closedAt     DateTime?
-  watchers     IssueWatcher[]
-  comments     IssueComment[]
-  pin          IssuePin?
-  photos       Photo[]
+  attributes    Json            @default("{}")
+  createdById   String?
+  createdBy     User?           @relation("IssuesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  closedAt      DateTime?
+  watchers      IssueWatcher[]
+  comments      IssueComment[]
+  pin           IssuePin?
+  photos        Photo[]
+  /// set when the issue was raised from a failed checklist item
+  checklistItem ChecklistItem?
 
   @@unique([projectId, number])
   @@index([projectId, statusId])
@@ -809,22 +818,156 @@ model IssuePin {
 /// A site photo, compressed in the browser to a JPEG at most 1600 px wide plus a small thumbnail.
 /// Attached to an issue, or a plain project photo when issueId is null.
 model Photo {
-  id           String   @id @default(cuid())
-  projectId    String
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  issueId      String?
-  issue        Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  storageKey   String   @unique
-  thumbKey     String   @unique
-  fileName     String
-  width        Int
-  height       Int
-  size         Int
-  caption      String?
-  uploadedById String?
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
+  id              String         @id @default(cuid())
+  projectId       String
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issueId         String?
+  issue           Issue?         @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  /// set for a photo answering a checklist's photo item
+  checklistItemId String?
+  checklistItem   ChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  storageKey      String         @unique
+  thumbKey        String         @unique
+  fileName        String
+  width           Int
+  height          Int
+  size            Int
+  caption         String?
+  uploadedById    String?
+  uploadedBy      User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
 
   @@index([projectId, createdAt])
   @@index([issueId])
+  @@index([checklistItemId])
+}
+
+// ---------- Checklists ----------
+
+enum ChecklistItemKind {
+  /// Yes / No / N/A; "No" is a failed item and can raise an issue
+  YES_NO
+  TEXT
+  NUMBER
+  DATE
+  SIGNATURE
+  PHOTO
+}
+
+enum ChecklistStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// A reusable checklist design: sections holding items. Built by Checklists Managers.
+model ChecklistTemplate {
+  id          String                     @id @default(cuid())
+  projectId   String
+  project     Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  /// archived templates stay on existing checklists but can't be used for new ones
+  archived    Boolean                    @default(false)
+  createdById String?
+  createdBy   User?                      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+  sections    ChecklistTemplateSection[]
+  checklists  Checklist[]
+
+  @@unique([projectId, name])
+}
+
+model ChecklistTemplateSection {
+  id         String                  @id @default(cuid())
+  templateId String
+  template   ChecklistTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title      String
+  order      Int                     @default(0)
+  items      ChecklistTemplateItem[]
+
+  @@index([templateId, order])
+}
+
+model ChecklistTemplateItem {
+  id        String                   @id @default(cuid())
+  sectionId String
+  section   ChecklistTemplateSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  label     String
+  kind      ChecklistItemKind
+  required  Boolean                  @default(false)
+  order     Int                      @default(0)
+
+  @@index([sectionId, order])
+}
+
+/// A checklist created from a template. Its sections and items are copied from the
+/// template when it is created, so later template edits don't change it.
+model Checklist {
+  id            String             @id @default(cuid())
+  projectId     String
+  project       Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// per-project sequence shown as CL-1, CL-2…
+  number        Int
+  title         String
+  templateId    String?
+  template      ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  /// the template's name when the checklist was created
+  templateName  String
+  status        ChecklistStatus    @default(NOT_STARTED)
+  /// assigned to a user or a company
+  assigneeType  SubjectType?
+  assigneeId    String?
+  locationId    String?
+  location      Location?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  dueDate       DateTime?          @db.Date
+  createdById   String?
+  createdBy     User?              @relation("ChecklistsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  completedAt   DateTime?
+  completedById String?
+  completedBy   User?              @relation("ChecklistsCompleted", fields: [completedById], references: [id], onDelete: SetNull)
+  sections      ChecklistSection[]
+  items         ChecklistItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status])
+}
+
+model ChecklistSection {
+  id          String          @id @default(cuid())
+  checklistId String
+  checklist   Checklist       @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  title       String
+  order       Int             @default(0)
+  items       ChecklistItem[]
+
+  @@index([checklistId, order])
+}
+
+model ChecklistItem {
+  id           String            @id @default(cuid())
+  checklistId  String
+  checklist    Checklist         @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  sectionId    String
+  section      ChecklistSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  label        String
+  kind         ChecklistItemKind
+  required     Boolean           @default(false)
+  order        Int               @default(0)
+  /// YES_NO: "YES" | "NO" | "NA"; TEXT/NUMBER: the text; DATE: "YYYY-MM-DD";
+  /// SIGNATURE: a small PNG data URL; PHOTO: unused (see photos)
+  value        String?
+  note         String?
+  answeredById String?
+  answeredBy   User?             @relation(fields: [answeredById], references: [id], onDelete: SetNull)
+  answeredAt   DateTime?
+  /// the issue raised from this item when it failed
+  issueId      String?           @unique
+  issue        Issue?            @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  photos       Photo[]
+
+  @@index([checklistId, order])
 }

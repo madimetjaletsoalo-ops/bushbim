@@ -12,6 +12,7 @@ import { addIssueComment, changeIssueStatus, toggleWatch, updateIssue } from "@/
 import { removePin } from "@/modules/issues/media-actions";
 import { canDeletePhoto } from "@/modules/issues/media";
 import { pinTarget } from "@/modules/issues/media-server";
+import { checklistLabel } from "@/modules/checklists/logic";
 import { isOverdue, issueLabel, listOptions, statusLabel } from "@/modules/issues/logic";
 import { accessFor, getIssuesContext } from "@/modules/issues/server";
 
@@ -42,6 +43,7 @@ export default async function IssuePage({ params }: { params: Promise<{ projectI
       watchers: { include: { user: { select: { name: true } } }, orderBy: { addedAt: "asc" } },
       comments: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "asc" }, take: 500 },
       pin: true,
+      checklistItem: { select: { checklist: { select: { id: true, number: true, title: true } } } },
       photos: { include: { uploadedBy: { select: { name: true } } }, orderBy: { createdAt: "asc" }, take: 200 },
     },
   });
@@ -93,6 +95,11 @@ export default async function IssuePage({ params }: { params: Promise<{ projectI
             {statusLabel(issue.status, ctx.statuses)}
           </span>
           <span>Created by {issue.createdBy?.name ?? "former member"} {fmt.format(issue.createdAt)}</span>
+          {issue.checklistItem && (
+            <Link href={`/projects/${projectId}/checklists/${issue.checklistItem.checklist.id}`} className="font-medium text-brand hover:underline" data-testid="from-checklist">
+              From checklist {checklistLabel(issue.checklistItem.checklist.number)}
+            </Link>
+          )}
         </p>
       </div>
 

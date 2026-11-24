@@ -56,6 +56,8 @@ model User {
   issuesCreated        Issue[]                @relation("IssuesCreated")
   issuesWatched        IssueWatcher[]
   issueComments        IssueComment[]
+  issuePins            IssuePin[]
+  photos               Photo[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -122,6 +124,7 @@ model Project {
   issueRootCauses IssueRootCause[]
   issueAttributes IssueAttribute[]
   issues          Issue[]
+  photos          Photo[]
 
   @@unique([accountId, name])
 }
@@ -284,6 +287,7 @@ model DocumentVersion {
   sheets               Sheet[]
   reviewDocuments      ReviewDocument[]
   transmittalDocuments TransmittalDocument[]
+  issuePins            IssuePin[]
 
   @@unique([documentId, number])
 }
@@ -752,6 +756,8 @@ model Issue {
   closedAt     DateTime?
   watchers     IssueWatcher[]
   comments     IssueComment[]
+  pin          IssuePin?
+  photos       Photo[]
 
   @@unique([projectId, number])
   @@index([projectId, statusId])
@@ -779,4 +785,46 @@ model IssueComment {
   createdAt DateTime @default(now())
 
   @@index([issueId, createdAt])
+}
+
+/// Where an issue sits on a sheet: one pin per issue, on a page of a document version.
+model IssuePin {
+  id          String          @id @default(cuid())
+  issueId     String          @unique
+  issue       Issue           @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  versionId   String
+  version     DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  page        Int
+  /// position in page units (PDF points at zoom 1, or image pixels), like markups
+  x           Float
+  y           Float
+  createdById String?
+  createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([versionId, page])
+}
+
+/// A site photo, compressed in the browser to a JPEG at most 1600 px wide plus a small thumbnail.
+/// Attached to an issue, or a plain project photo when issueId is null.
+model Photo {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issueId      String?
+  issue        Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  storageKey   String   @unique
+  thumbKey     String   @unique
+  fileName     String
+  width        Int
+  height       Int
+  size         Int
+  caption      String?
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([issueId])
 }

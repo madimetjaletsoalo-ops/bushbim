@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { badge, btn, btnDanger, btnGhost, input } from "@/components/ui";
 import { createMarkup, deleteMarkup, setCalibration, setMarkupStatus, type MarkupDTO } from "@/modules/docs/markup-actions";
+import { placePin } from "@/modules/issues/media-actions";
+import { pinQuery, pinStyle } from "@/modules/issues/media";
 import {
   MARKUP_COLORS,
   UNITS,
@@ -16,7 +18,7 @@ import {
   type Pt,
 } from "@/modules/docs/markup";
 
-type Tool = "PAN" | MarkupType | "CALIBRATE";
+type Tool = "PAN" | MarkupType | "CALIBRATE" | "PIN";
 type Scale = { page: number; unitsPerPoint: number; unit: string };
 type PdfDoc = import("pdfjs-dist").PDFDocumentProxy;
 
@@ -30,7 +32,13 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: "LENGTH", label: "Length", hint: "Click points, then Finish" },
   { id: "AREA", label: "Area", hint: "Click 3+ corners, then Finish" },
   { id: "CALIBRATE", label: "Set scale", hint: "Drag along a known dimension" },
+  { id: "PIN", label: "Pin issue", hint: "Click where the issue is" },
 ];
+
+/** An issue pinned on this version, drawn in its status colour. */
+export type PinView = { issueId: string; number: number; title: string; page: number; x: number; y: number; color: string; closed: boolean; statusName: string };
+/** Issues the member may pin (or move the pin of). */
+export type PinnableIssue = { id: string; number: number; title: string; color: string; closed: boolean; statusName: string; pinnedHere: boolean; pinnedElsewhere: boolean };
 const TYPE_LABEL: Record<string, string> = { PEN: "Pen", RECT: "Rectangle", CLOUD: "Cloud", ARROW: "Arrow", TEXT: "Text", LENGTH: "Length", AREA: "Area" };
 
 interface Props {
@@ -52,6 +60,12 @@ interface Props {
   initialPage?: number;
   /** compare page for the previous version; the current page numbers are appended */
   compareBase?: string | null;
+  /** issue pins on this version (only when the member has Issues access) */
+  pins?: PinView[];
+  /** issues the member can pin; null hides the Pin tool */
+  pinnable?: PinnableIssue[] | null;
+  /** issue to highlight and scroll to (?pin=) */
+  focusPin?: string | null;
 }
 
 export function Viewer(p: Props) {
@@ -80,9 +94,16 @@ export function Viewer(p: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const dragging = useRef(false);
+  const [pins, setPins] = useState<PinView[]>(p.pins ?? []);
+  const [pinnable, setPinnable] = useState<PinnableIssue[]>(p.pinnable ?? []);
+  const [pinAt, setPinAt] = useState<Pt | null>(null);
+  const [pinIssue, setPinIssue] = useState("");
+  const [focus, setFocus] = useState<string | null>(p.focusPin ?? null);
 
   const scale = scales.find((s) => s.page === page) ?? null;
   const pageMarkups = useMemo(() => markups.filter((m) => m.page === page), [markups, page]);
+  const pagePins = useMemo(() => pins.filter((x) => x.page === page), [pins, page]);
+  const issuesBase = `/projects/${p.projectId}/issues`;
 
   // ---------- loading and rendering ----------
 
@@ -161,6 +182,16 @@ export function Viewer(p: Props) {
     setFitted(true);
   }, [size, fitted]);
 
+  // bring the pin from ?pin= into view once the page is fitted
+  useEffect(() => {
+    if (!fitted || !focus || !wrapRef.current) return;
+    const pin = pins.find((x) => x.issueId === focus && x.page === page);
+    if (!pin) return;
+    const el = wrapRef.current;
+    el.scrollTo({ left: Math.max(0, pin.x * zoom - el.clientWidth / 2), top: Math.max(0, pin.y * zoom - el.clientHeight / 2) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitted, focus]);
+
   // ---------- drawing ----------
 
   const toPage = useCallback(
@@ -186,9 +217,14 @@ export function Viewer(p: Props) {
   }
 
   function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
-    if (tool === "PAN" || textAt || calib) return;
+    if (tool === "PAN" || textAt || calib || pinAt) return;
     e.preventDefault();
     const pt = toPage(e);
+    if (tool === "PIN") {
+      setPinAt(pt);
+      setPinIssue("");
+      return;
+    }
     if (tool === "TEXT") {
       setTextAt(pt);
       setTextValue("");
@@ -241,6 +277,23 @@ export function Viewer(p: Props) {
     await save("TEXT", [at], textValue.trim());
   }
 
+  async function savePin() {
+    if (!pinAt || !pinIssue) return;
+    setBusy(true);
+    setError(null);
+    const res = await placePin(p.projectId, pinIssue, { versionId: p.versionId, page, x: pinAt[0], y: pinAt[1] });
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    const issue = pinnable.find((i) => i.id === pinIssue)!;
+    setPins((ps) => [
+      ...ps.filter((x) => x.issueId !== pinIssue),
+      { number: issue.number, title: issue.title, color: issue.color, closed: issue.closed, statusName: issue.statusName, ...res.data },
+    ]);
+    setPinnable((is) => is.map((i) => (i.id === pinIssue ? { ...i, pinnedHere: true, pinnedElsewhere: false } : i)));
+    setFocus(pinIssue);
+    setPinAt(null);
+  }
+
   async function saveCalibration() {
     if (!calib) return;
     const value = Number(calibValue.replace(",", "."));
@@ -261,6 +314,7 @@ export function Viewer(p: Props) {
         resetDraft();
         setTextAt(null);
         setCalib(null);
+        setPinAt(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -271,6 +325,7 @@ export function Viewer(p: Props) {
     resetDraft();
     setTextAt(null);
     setCalib(null);
+    setPinAt(null);
     setError(null);
     setTool(t);
   };
@@ -278,6 +333,7 @@ export function Viewer(p: Props) {
     resetDraft();
     setTextAt(null);
     setCalib(null);
+    setPinAt(null);
     setPage(Math.min(Math.max(1, n), numPages));
   };
 
@@ -368,7 +424,7 @@ export function Viewer(p: Props) {
           )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1" role="toolbar" aria-label="Markup tools">
-          {TOOLS.filter((t) => t.id !== "CALIBRATE" || p.canCalibrate).map((t) => (
+          {TOOLS.filter((t) => (t.id !== "CALIBRATE" || p.canCalibrate) && (t.id !== "PIN" || !!p.pinnable)).map((t) => (
             <button
               key={t.id}
               type="button"
@@ -433,7 +489,41 @@ export function Viewer(p: Props) {
                 {pageMarkups.map((m) => renderShape(m, m.id))}
                 {draft.length > 0 && renderShape({ type: tool === "CALIBRATE" ? "LENGTH" : tool, points: draft, color }, "draft", { draft: true })}
                 {calib && <path d={`M ${calib.a[0]} ${calib.a[1]} L ${calib.b[0]} ${calib.b[1]}`} stroke="#ef6c00" strokeWidth={2} vectorEffect="non-scaling-stroke" />}
+                {pagePins.map((pin) => {
+                  const r = 11 / zoom;
+                  const st = pinStyle(pin);
+                  const focused = focus === pin.issueId;
+                  return (
+                    <a key={pin.issueId} href={`${issuesBase}/${pin.issueId}`} aria-label={`Issue #${pin.number} ${pin.title}`} data-testid="issue-pin" data-color={pin.color} data-issue={pin.number}>
+                      <title>{`#${pin.number} ${pin.title}${pin.statusName ? ` (${pin.statusName})` : ""}`}</title>
+                      <g transform={`translate(${pin.x} ${pin.y})`} opacity={st.opacity}>
+                        {focused && <circle cy={-r * 1.9} r={r * 1.7} fill="none" stroke={pin.color} strokeWidth={2} vectorEffect="non-scaling-stroke" />}
+                        <path d={`M 0 0 L ${-r * 0.75} ${-r * 1.2} A ${r} ${r} 0 1 1 ${r * 0.75} ${-r * 1.2} Z`} fill={st.fill} stroke="white" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                        <text y={-r * 1.6} textAnchor="middle" fontSize={(pin.number > 99 ? 8 : 10) / zoom} fontWeight={700} fill="white" fontFamily="Helvetica, Arial, sans-serif">{pin.number}</text>
+                      </g>
+                    </a>
+                  );
+                })}
+                {pinAt && <circle cx={pinAt[0]} cy={pinAt[1]} r={5 / zoom} fill="#ef6c00" data-testid="pin-draft" />}
               </svg>
+            )}
+            {pinAt && (
+              <div className="absolute z-10 w-64 rounded-md border border-line bg-surface p-2 shadow-lg" data-testid="pin-form" style={{ left: Math.min(pinAt[0] * zoom, Math.max(0, w - 260)), top: pinAt[1] * zoom + 8 }}>
+                <label className="mb-1 block text-xs font-medium" htmlFor="pin-issue">Issue to pin here</label>
+                <select id="pin-issue" className={`${input} py-1`} value={pinIssue} onChange={(e) => setPinIssue(e.target.value)}>
+                  <option value="">Choose an issue…</option>
+                  {pinnable.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      #{i.number} {i.title.length > 40 ? `${i.title.slice(0, 40)}…` : i.title}{i.pinnedHere || i.pinnedElsewhere ? " (moves its pin)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className={btn} onClick={savePin} disabled={!pinIssue || busy}>Pin issue</button>
+                  <a className={btnGhost} href={`${issuesBase}/new?${pinQuery({ versionId: p.versionId, page, x: pinAt[0], y: pinAt[1] })}`}>New issue here</a>
+                  <button type="button" className={btnGhost} onClick={() => setPinAt(null)}>Cancel</button>
+                </div>
+              </div>
             )}
             {textAt && (
               <div className="absolute z-10 w-56 rounded-md border border-line bg-surface p-2 shadow-lg" style={{ left: Math.min(textAt[0] * zoom, Math.max(0, w - 230)), top: textAt[1] * zoom }}>
@@ -469,6 +559,21 @@ export function Viewer(p: Props) {
                 <button type="button" className={btnGhost} onClick={() => setCalib(null)}>Cancel</button>
               </div>
               <p className="mt-2 text-xs text-ink-soft">The scale applies to this page for everyone.</p>
+            </div>
+          )}
+          {(p.pinnable || pins.length > 0) && (
+            <div className="mb-4">
+              <h3 className="mb-2 text-sm font-semibold">Issues on page {page} ({pagePins.length})</h3>
+              {pagePins.length === 0 && <p className="text-sm text-ink-soft">{p.pinnable ? "None pinned. Use Pin issue and click the sheet." : "None pinned."}</p>}
+              <ul className="space-y-1" data-testid="pin-list">
+                {pagePins.map((pin) => (
+                  <li key={pin.issueId} className="flex items-center gap-2 text-sm" data-testid="pin-item">
+                    <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: pin.color, opacity: pinStyle(pin).opacity }} />
+                    <a href={`${issuesBase}/${pin.issueId}`} className="min-w-0 truncate text-brand hover:underline">#{pin.number} {pin.title}</a>
+                    {pin.statusName && <span className="ml-auto shrink-0 text-xs text-ink-soft">{pin.statusName}</span>}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           <h3 className="mb-2 text-sm font-semibold">Markups on page {page} ({pageMarkups.length})</h3>

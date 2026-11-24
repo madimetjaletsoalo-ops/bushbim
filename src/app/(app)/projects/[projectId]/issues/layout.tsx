@@ -13,6 +13,7 @@ export default async function IssuesLayout({ children, params }: { children: Rea
       <nav aria-label="Issues" className="flex gap-1 overflow-x-auto md:w-44 md:shrink-0 md:flex-col md:overflow-visible">
         <NavLink variant="side" href={base} exact>All issues</NavLink>
         {can(member, "ISSUES", "create", grants) && <NavLink variant="side" href={`${base}/new`}>New issue</NavLink>}
+        <NavLink variant="side" href={`${base}/photos`}>Photos</NavLink>
         {can(member, "ISSUES", "manage", grants) && <NavLink variant="side" href={`${base}/settings`}>Settings</NavLink>}
       </nav>
       <div className="min-w-0 flex-1">{children}</div>

@@ -48,6 +48,13 @@ export function DocsSidebar({ projectId, tree, sets }: { projectId: string; tree
       ) : (
         <FolderTree projectId={projectId} tree={tree} />
       )}
+      <Link
+        href={`${base}/photos`}
+        aria-current={pathname.startsWith(`${base}/photos`) ? "page" : undefined}
+        className={`block rounded px-2 py-1.5 text-sm ${pathname.startsWith(`${base}/photos`) ? "bg-brand/10 font-medium text-brand" : "hover:bg-muted"}`}
+      >
+        Photos
+      </Link>
     </div>
   );
 }

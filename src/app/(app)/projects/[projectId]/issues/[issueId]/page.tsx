@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm } from "@/components/ActionForm";
+import { ConfirmButton } from "@/components/docs/ConfirmButton";
+import { PhotoGrid } from "@/components/issues/PhotoGrid";
+import { PhotoUploader } from "@/components/issues/PhotoUploader";
 import { IssueFields } from "@/components/issues/IssueFields";
 import { SubmitButton } from "@/components/SubmitButton";
 import { badge, btnGhost, card, input, label } from "@/components/ui";
 import { db } from "@/lib/db";
 import { addIssueComment, changeIssueStatus, toggleWatch, updateIssue } from "@/modules/issues/actions";
+import { removePin } from "@/modules/issues/media-actions";
+import { canDeletePhoto } from "@/modules/issues/media";
+import { pinTarget } from "@/modules/issues/media-server";
 import { isOverdue, issueLabel, listOptions, statusLabel } from "@/modules/issues/logic";
 import { accessFor, getIssuesContext } from "@/modules/issues/server";
 
@@ -16,6 +22,10 @@ const ACTIVITY_LABEL: Record<string, string> = {
   "issue.commented": "commented",
   "issue.watched": "started watching",
   "issue.unwatched": "stopped watching",
+  "issue.pinned": "pinned it on a sheet",
+  "issue.unpinned": "removed the pin",
+  "issue.photo_added": "added a photo",
+  "issue.photo_deleted": "removed a photo",
 };
 
 export default async function IssuePage({ params }: { params: Promise<{ projectId: string; issueId: string }> }) {
@@ -31,6 +41,8 @@ export default async function IssuePage({ params }: { params: Promise<{ projectI
       createdBy: { select: { name: true } },
       watchers: { include: { user: { select: { name: true } } }, orderBy: { addedAt: "asc" } },
       comments: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "asc" }, take: 500 },
+      pin: true,
+      photos: { include: { uploadedBy: { select: { name: true } } }, orderBy: { createdAt: "asc" }, take: 200 },
     },
   });
   if (!issue) notFound();
@@ -48,6 +60,10 @@ export default async function IssuePage({ params }: { params: Promise<{ projectI
   const watching = issue.watchers.some((w) => w.userId === ctx.user.id);
   const overdue = isOverdue(issue.dueDate, issue.status.closed, ctx.project.timezone);
   const location = ctx.locationPaths.find((l) => l.id === issue.locationId)?.path;
+  // the sheet the pin is on, if this member can open it
+  const pinDoc = issue.pin ? await pinTarget(projectId, issue.pin.versionId) : null;
+  const pinSheet = issue.pin && pinDoc ? await db.sheet.findUnique({ where: { versionId_page: { versionId: issue.pin.versionId, page: issue.pin.page } } }) : null;
+  const canAddPhotos = access.see && (ctx.canCreate || access.status);
   const attrs = (issue.attributes && typeof issue.attributes === "object" ? issue.attributes : {}) as Record<string, string>;
 
   const facts: [string, React.ReactNode][] = [
@@ -110,6 +126,22 @@ export default async function IssuePage({ params }: { params: Promise<{ projectI
             </section>
           )}
 
+          <section className={`${card} p-5`} data-testid="issue-photos">
+            <h3 className="mb-3 font-semibold">Photos ({issue.photos.length})</h3>
+            {issue.photos.length === 0 ? (
+              <p className="mb-3 text-sm text-ink-soft">No photos yet.</p>
+            ) : (
+              <div className="mb-4">
+                <PhotoGrid
+                  projectId={projectId}
+                  timezone={ctx.project.timezone}
+                  photos={issue.photos.map((p) => ({ ...p, canDelete: canDeletePhoto(p, ctx.user.id, ctx.canManage) }))}
+                />
+              </div>
+            )}
+            {canAddPhotos && <PhotoUploader projectId={projectId} issueId={issue.id} />}
+          </section>
+
           <section className={`${card} p-5`}>
             <h3 className="mb-3 font-semibold">Comments</h3>
             {issue.comments.length === 0 ? (
@@ -153,6 +185,31 @@ export default async function IssuePage({ params }: { params: Promise<{ projectI
               </ActionForm>
             </section>
           )}
+          <section className={`${card} p-5`} data-testid="issue-pin">
+            <h3 className="mb-2 font-semibold">On a sheet</h3>
+            {!issue.pin ? (
+              <p className="text-sm text-ink-soft">Not pinned. {access.edit ? "Open a sheet in Document Control and use the Pin tool." : ""}</p>
+            ) : pinDoc ? (
+              <div className="space-y-2 text-sm">
+                <p className="break-words">
+                  {pinSheet ? <><span className="font-medium">{pinSheet.number}</span> {pinSheet.title}</> : <span className="font-medium">{pinDoc.document.name}</span>}
+                  <span className="block text-xs text-ink-soft">V{pinDoc.number} · page {issue.pin.page}</span>
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Link href={`/projects/${projectId}/viewer/${issue.pin.versionId}?page=${issue.pin.page}&pin=${issue.id}`} className="font-medium text-brand hover:underline">
+                    Open sheet at pin
+                  </Link>
+                  {access.edit && (
+                    <form action={removePin.bind(null, projectId, issue.id)}>
+                      <ConfirmButton message="Remove this issue's pin from the sheet?" className="font-medium text-red-700 hover:underline">Remove pin</ConfirmButton>
+                    </form>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-soft">Pinned on a sheet you can&apos;t open.</p>
+            )}
+          </section>
           <section className={`${card} p-5`}>
             <h3 className="mb-2 font-semibold">Watchers</h3>
             {issue.watchers.length === 0 ? (

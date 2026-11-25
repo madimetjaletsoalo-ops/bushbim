@@ -7,6 +7,8 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ActionState } from "@/modules/admin/types";
 import { HEX_COLOR, changedFields, fieldLabels, issueLabel, issueSchema, parseAssignee, parseOptions, validateAttributes, type IssueInput } from "./logic";
+import { readPinFields } from "./media";
+import { pinTarget } from "./media-server";
 import { accessFor, createIssueRow, getIssuesContext, type IssuesContext } from "./server";
 
 // Access rules live in logic.ts (issueAccess). Every action re-checks them and writes an AuditEvent.
@@ -108,12 +110,26 @@ export async function createIssue(projectId: string, _: ActionState, form: FormD
   if ("error" in r) return fail(r.error);
   const status = ctx.statuses.find((s) => s.id === r.statusId) ?? ctx.statuses.find((s) => s.isDefault) ?? ctx.statuses.find((s) => !s.draft && !s.closed);
   if (!status) return fail("This project has no issue statuses. Ask a Manager to add one.");
+  // "New issue here" from the viewer carries a pin position
+  const pin = readPinFields((k) => str(form, k));
+  if (pin && "error" in pin) return fail(pin.error);
+  const target = pin ? await pinTarget(projectId, pin.versionId) : null;
+  if (pin && !target) return fail("You can't open the sheet this pin is on.");
   const issue = await createIssueRow(
-    { projectId, ...r.data, statusId: status.id, createdById: ctx.user.id, closedAt: status.closed ? new Date() : null },
+    {
+      projectId,
+      ...r.data,
+      statusId: status.id,
+      createdById: ctx.user.id,
+      closedAt: status.closed ? new Date() : null,
+      ...(pin ? { pin: { create: { versionId: pin.versionId, page: pin.page, x: pin.x, y: pin.y, createdById: ctx.user.id } } } : {}),
+    },
     // the creator watches their own issue
     [...new Set([ctx.user.id, ...r.watcherIds])],
     ctx.user.id,
   );
+  if (pin && target)
+    await audit(ctx, "issue.pinned", { issueId: issue.id, number: issue.number, versionId: pin.versionId, document: target.document.name, page: pin.page, moved: false });
   refresh(projectId);
   redirect(`/projects/${projectId}/issues/${issue.id}`);
 }

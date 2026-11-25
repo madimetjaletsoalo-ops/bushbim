@@ -6,7 +6,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const { projectId } = await params;
   const { project, member, grants, isAdmin } = await getProjectContext(projectId);
   const base = `/projects/${projectId}`;
-  const showField = (["ISSUES", "CHECKLISTS", "DAILY_LOGS"] as const).some((s) => can(member, s, "view", grants));
+  const showField = (["CHECKLISTS", "DAILY_LOGS"] as const).some((s) => can(member, s, "view", grants));
   return (
     <>
       <div className="bg-chrome text-chrome-ink">
@@ -16,6 +16,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
             {can(member, "DOCS", "view", grants) && <NavLink href={`${base}/docs`}>Document Control</NavLink>}
             {can(member, "DOCS", "view", grants) && <NavLink href={`${base}/reviews`}>Reviews</NavLink>}
             {can(member, "DOCS", "view", grants) && <NavLink href={`${base}/transmittals`}>Transmittals</NavLink>}
+            {can(member, "ISSUES", "view", grants) && <NavLink href={`${base}/issues`}>Issues</NavLink>}
             {showField && <NavLink href={`${base}/field`}>Field Management</NavLink>}
             {isAdmin && <NavLink href={`${base}/admin`}>Project Admin</NavLink>}
           </nav>

@@ -25,7 +25,7 @@ The product owner can reorder, add or delete items at any time. Write each new i
 
 ## Field Management
 
-- [ ] **5. Issues** ⭐ custom statuses
+- [x] **5. Issues** ⭐ custom statuses (2026-11-23). Issues with type/subtype, status, assignee (user/role/company), due date, location tree, root cause, custom attributes (list/text/number/date), watchers, comments and activity; ⭐ per-project statuses (rename, recolour, reorder, add, sub-statuses, closed/draft flags) seeded with the nine defaults; filter panel, coloured status-bar table, CSV export with the same filters; Creators edit only their own issues, assignees change status.
   Done when: issues have a title, description, type and subtype (admin-configurable), status, assignee (user, company or role), due date, location (project location tree), root cause, watchers and comments; ⭐ statuses are configurable per project (rename, add, sub-statuses) with the default set Draft, Open, Answered, Work completed, Ready to inspect, Not approved, In dispute, Closed, Void; the filter panel offers type, status (multi-select), created by, created on, assignee and custom attributes; the table has a coloured status bar, ID, type and title, as in the reference screenshot; CSV export works; Creator/Manager rules apply (a Creator edits only their own issues).
 - [ ] **6. Issue pins and photos**
   Done when: issues can be pinned on a sheet in the viewer, and pins show status colour; photos are attached to issues and compressed client-side to at most 1600 px wide JPEG; a photo gallery lists photos per project ⭐ (photos also inside Docs).

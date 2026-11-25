@@ -7,7 +7,6 @@ export default async function FieldPage({ params }: { params: Promise<{ projectI
     <ComingSoon
       title="Field Management"
       items={[
-        "Issues with custom statuses, filters, photos and pins on sheets",
         "Checklists from templates (quality, safety, snagging, commissioning)",
         "Daily Logs with weather, labour per company and subcontractor input",
       ]}

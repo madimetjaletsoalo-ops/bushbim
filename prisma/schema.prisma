@@ -53,6 +53,9 @@ model User {
   reviewDecisions      ReviewDecision[]
   transmittalsSent     Transmittal[]
   transmittalsReceived TransmittalRecipient[]
+  issuesCreated        Issue[]                @relation("IssuesCreated")
+  issuesWatched        IssueWatcher[]
+  issueComments        IssueComment[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -113,6 +116,12 @@ model Project {
   reviewWorkflows ReviewWorkflow[]
   reviews         Review[]
   transmittals    Transmittal[]
+  locations       Location[]
+  issueTypes      IssueType[]
+  issueStatuses   IssueStatus[]
+  issueRootCauses IssueRootCause[]
+  issueAttributes IssueAttribute[]
+  issues          Issue[]
 
   @@unique([accountId, name])
 }
@@ -610,4 +619,164 @@ model TransmittalDownload {
   createdAt     DateTime             @default(now())
 
   @@index([transmittalId, createdAt])
+}
+
+// ---------- Issues ----------
+
+/// A place in the project: Site → Zone → Villa/Suite → Room. Item 16 adds CSV import.
+model Location {
+  id        String     @id @default(cuid())
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Location?  @relation("LocationTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Location[] @relation("LocationTree")
+  name      String
+  createdAt DateTime   @default(now())
+  issues    Issue[]
+
+  @@unique([projectId, parentId, name])
+  @@index([projectId])
+}
+
+model IssueType {
+  id        String         @id @default(cuid())
+  projectId String
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  subtypes  IssueSubtype[]
+  issues    Issue[]
+
+  @@unique([projectId, name])
+}
+
+model IssueSubtype {
+  id        String    @id @default(cuid())
+  typeId    String
+  type      IssueType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  issues    Issue[]
+
+  @@unique([typeId, name])
+}
+
+/// ⭐ Per-project issue statuses: renameable, addable, with optional sub-statuses (parentId set).
+model IssueStatus {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    IssueStatus?  @relation("StatusTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  IssueStatus[] @relation("StatusTree")
+  name      String
+  /// "#rrggbb", used for the status bar in the issue table
+  color     String
+  /// issues in a closed status are not overdue and get `closedAt`
+  closed    Boolean       @default(false)
+  /// issues in a draft status are visible only to their creator and Issues Managers
+  draft     Boolean       @default(false)
+  /// the status new issues start in (one per project)
+  isDefault Boolean       @default(false)
+  order     Int           @default(0)
+  createdAt DateTime      @default(now())
+  issues    Issue[]
+
+  @@unique([projectId, name])
+  @@index([projectId, order])
+}
+
+model IssueRootCause {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  issues    Issue[]
+
+  @@unique([projectId, name])
+}
+
+enum IssueAttributeKind {
+  TEXT
+  NUMBER
+  DATE
+  LIST
+}
+
+/// A custom attribute shown on every issue in the project. Values live in `Issue.attributes`.
+model IssueAttribute {
+  id        String             @id @default(cuid())
+  projectId String
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  kind      IssueAttributeKind
+  /// LIST only: the allowed values
+  options   Json               @default("[]")
+  createdAt DateTime           @default(now())
+
+  @@unique([projectId, name])
+}
+
+model Issue {
+  id           String          @id @default(cuid())
+  projectId    String
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// per-project sequence shown as #1, #2…
+  number       Int
+  title        String
+  description  String?
+  typeId       String?
+  type         IssueType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  subtypeId    String?
+  subtype      IssueSubtype?   @relation(fields: [subtypeId], references: [id], onDelete: SetNull)
+  statusId     String
+  status       IssueStatus     @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  /// assigned to a user, a role or a company
+  assigneeType SubjectType?
+  assigneeId   String?
+  dueDate      DateTime?       @db.Date
+  locationId   String?
+  location     Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  rootCauseId  String?
+  rootCause    IssueRootCause? @relation(fields: [rootCauseId], references: [id], onDelete: SetNull)
+  /// custom attribute values: { [IssueAttribute.id]: string }
+  attributes   Json            @default("{}")
+  createdById  String?
+  createdBy    User?           @relation("IssuesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  closedAt     DateTime?
+  watchers     IssueWatcher[]
+  comments     IssueComment[]
+
+  @@unique([projectId, number])
+  @@index([projectId, statusId])
+  @@index([projectId, createdAt])
+}
+
+model IssueWatcher {
+  issueId String
+  issue   Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addedAt DateTime @default(now())
+
+  @@id([issueId, userId])
+  @@index([userId])
+}
+
+model IssueComment {
+  id        String   @id @default(cuid())
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([issueId, createdAt])
 }

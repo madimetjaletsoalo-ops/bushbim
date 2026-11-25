@@ -17,7 +17,8 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Document Control: transmittals (send chosen versions to members or external emails, a no-login download link per recipient with an expiry, revoke, a log of who downloaded what and when, **text search of the log**) | ✅ Built (item 8) |
 | Field Management: issues (type and subtype, assignee by user, role or company, due date, location tree, root cause, custom attributes, watchers, comments, activity), **custom statuses per project with sub-statuses**, filter panel, coloured status-bar table, CSV export; Creators edit only their own issues, assignees update status | ✅ Built (item 5) |
 | Field Management: issue pins on sheets in the viewer (status-coloured, "New issue here" from the sheet), issue photos compressed in the browser to a JPEG at most 1600 px wide with thumbnails, **project photo gallery under Issues and inside Document Control** | ✅ Built (item 6) |
-| Field Management (checklists, daily logs) | Backlog items 9–10 |
+| Field Management: checklists (template builder with sections and yes/no/N/A, text, number, date, signature and photo items; starter templates "Villa handover snag list (luxury finishes)", "Thatch roof inspection" and "Pool commissioning"; assigned to a person or company at a location; who answered and who completed, and when; one-click issue from a failed item; PDF of the result) | ✅ Built (item 9) |
+| Field Management: daily logs | Backlog item 10 |
 
 ## Stack
 
@@ -54,12 +55,13 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/checklists/     Checklists: access, answers, progress, starter templates (pure + unit tested), server actions, photo items, PDF export
 src/modules/issues/         Issues: access rules, statuses, filters, dates, attributes and CSV (pure + unit tested), server actions, defaults; pins and photos (media*.ts)
 src/modules/transmittals/   Transmittals: recipient parsing, signed link tokens, expiry and search (pure + unit tested), server actions, public link resolver
 src/modules/reviews/        Reviews: workflow/step logic (pure + unit tested), server actions, auto-start, copy approved, PDF export
 src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
-src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,field}/   modules
+src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,checklists,field}/   modules
 src/app/(public)/t/[token]  no-login transmittal download page (files via /api/t/[token]/[fileId])
 ```
 
@@ -132,3 +134,12 @@ Issues (`src/modules/issues/`):
 - Due and created-on dates follow the project's time zone. Every change is in the issue's activity panel and the project activity log.
 - **Pins**: the viewer's *Pin issue* tool places an issue on a page of a sheet (one pin per issue; pinning again moves it), or starts *New issue here* already pinned. Pins take the issue's status colour (faded once closed) and link to the issue; the issue shows "Open sheet at pin". Pinning needs edit rights on the issue and View on the sheet's folder; pins only show to people who can see the issue.
 - **Photos**: added on an issue (its Creators/Managers or assignee) or to the project gallery (Issues or Document Control Creators). The browser re-encodes each photo as a JPEG at most 1600 px wide plus a 320 px thumbnail before upload; the server checks the stored files really are JPEGs within those widths. ⭐ The gallery (*Photos*) appears under Issues and inside Document Control, filtered to photos on issues the member can see plus project photos. The uploader or a Manager can delete a photo.
+
+Checklists (`src/modules/checklists/`):
+
+- Checklists Managers build **templates** under *Templates*: sections holding items answered Yes / No / N/A, text, a number, a date, a drawn signature or photos, each optionally required. Items and sections can be renamed and reordered; templates are archived rather than deleted. Every project starts with three templates: "Villa handover snag list (luxury finishes)", "Thatch roof inspection" and "Pool commissioning".
+- Creators start a checklist from a template, assigned to a person or a company, at a location from the project location tree, with an optional due date. The checklist copies the template, so later template edits don't change it.
+- Viewers see every checklist. The assignee (the person, or anyone in the company), the checklist's creator and Managers answer items; each answer records who and when. **Complete** needs every required item answered, records who and when, and locks the answers until the creator or a Manager reopens it. Managers can delete a checklist.
+- An item answered **No** is marked failed: anyone with Issues Creator access can **Raise issue** in one click. The issue is titled after the item, placed at the checklist's location, assigned like the checklist, and links back to it. The note on the item is copied into its description.
+- Photo items use the same on-device compression as issue photos (at most 1600 px wide JPEG). Their photos appear in the gallery under *On checklists*. Signatures are stored as small PNGs (at most 80 KB).
+- **Download PDF** produces the result: details, every answer with who and when, notes, raised issues, signatures and photo thumbnails.

@@ -7,8 +7,8 @@ import { db } from "@/lib/db";
 import { getStorage, type PresignedPut } from "@/lib/storage";
 import { photoClaims, secretBytes, signToken, verifyToken } from "@/modules/docs/token";
 import { issueLabel } from "./logic";
-import { MAX_CAPTION, MAX_PHOTOS_PER_UPLOAD, THUMB_MAX_WIDTH, canDeletePhoto, checkStoredPhoto, jpegSize, photoFileName, photoKeys, photoSpec, pinSchema } from "./media";
-import { canAddProjectPhotos, photoAccess, pinTarget } from "./media-server";
+import { MAX_CAPTION, MAX_PHOTOS_PER_UPLOAD, canDeletePhoto, photoFileName, photoKeys, photoSpec, pinSchema } from "./media";
+import { canAddProjectPhotos, photoAccess, pinTarget, verifyUploadedPhoto } from "./media-server";
 import { accessFor, getIssuesContext, type IssuesContext } from "./server";
 
 // Pins: placing, moving or removing an issue's pin needs edit rights on the issue
@@ -132,21 +132,9 @@ export async function completePhotoUpload(projectId: string, token: string, capt
   const target = await photoTarget(ctx, c.iid || null);
   if (!target) return { ok: false, error: "You can no longer add photos here." };
   if (await db.photo.findUnique({ where: { storageKey: c.key } })) return { ok: false, error: "This photo was already saved." };
-  const storage = getStorage();
-  const discard = () => storage.remove([c.key, c.tkey]).catch(() => {});
-  const [size, tsize] = await Promise.all([storage.head(c.key), storage.head(c.tkey)]);
-  if (size === null || tsize === null) return { ok: false, error: `${c.name} didn't finish uploading. Try again.` };
-  if (size !== c.size || tsize !== c.tsize) {
-    await discard();
-    return { ok: false, error: `${c.name} arrived incomplete. Try again.` };
-  }
-  const [main, thumb] = await Promise.all([storage.read(c.key), storage.read(c.tkey)]);
-  const dims = jpegSize(main);
-  const problem = checkStoredPhoto(dims) ?? checkStoredPhoto(jpegSize(thumb), THUMB_MAX_WIDTH);
-  if (problem || !dims) {
-    await discard();
-    return { ok: false, error: `${c.name}: ${problem ?? "That file isn't a JPEG photo."}` };
-  }
+  const checked = await verifyUploadedPhoto(c);
+  if (!checked.ok) return checked;
+  const { size, dims } = checked;
   const text = (caption ?? "").trim().slice(0, MAX_CAPTION) || null;
   const issue = target.issue;
   const photo = await db.$transaction(async (tx) => {
@@ -170,7 +158,7 @@ export async function completePhotoUpload(projectId: string, token: string, capt
 export async function deletePhoto(projectId: string, photoId: string) {
   const ctx = await getIssuesContext(projectId);
   const found = await photoAccess(ctx, photoId);
-  if (!found || !canDeletePhoto(found.photo, ctx.user.id, found.manager)) return;
+  if (!found || found.photo.checklistItemId || !canDeletePhoto(found.photo, ctx.user.id, found.manager)) return;
   const { photo } = found;
   await db.$transaction([
     db.photo.delete({ where: { id: photo.id } }),

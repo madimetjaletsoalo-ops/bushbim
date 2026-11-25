@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { input, label } from "@/components/ui";
 import { formatBytes } from "@/modules/docs/logic";
+import { completeChecklistPhotoUpload, requestChecklistPhotoUploads } from "@/modules/checklists/media-actions";
 import { completePhotoUpload, requestPhotoUploads } from "@/modules/issues/media-actions";
 import { MAX_CAPTION, MAX_PHOTOS_PER_UPLOAD, PHOTO_MAX_WIDTH } from "@/modules/issues/media";
 import { compressPhoto, type Compressed } from "./compress";
@@ -25,7 +26,18 @@ function put(url: string, headers: Record<string, string>, body: Blob): Promise<
  * Adds photos to an issue (or the project gallery when issueId is null).
  * Each photo is compressed here to a JPEG at most 1600 px wide before it is sent.
  */
-export function PhotoUploader({ projectId, issueId }: { projectId: string; issueId: string | null }) {
+export function PhotoUploader({
+  projectId,
+  issueId,
+  checklistItem,
+  label: buttonLabel = "Add photos",
+}: {
+  projectId: string;
+  issueId: string | null;
+  /** answer a checklist photo item instead of adding to an issue */
+  checklistItem?: { checklistId: string; itemId: string };
+  label?: string;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -54,7 +66,10 @@ export function PhotoUploader({ projectId, issueId }: { projectId: string; issue
         }
       }
       if (!done.length) return;
-      const res = await requestPhotoUploads(projectId, issueId, done.map((d) => ({ name: d.file.name, size: d.c.photo.size, thumbSize: d.c.thumb.size })));
+      const specs = done.map((d) => ({ name: d.file.name, size: d.c.photo.size, thumbSize: d.c.thumb.size }));
+      const res = checklistItem
+        ? await requestChecklistPhotoUploads(projectId, checklistItem.checklistId, checklistItem.itemId, specs)
+        : await requestPhotoUploads(projectId, issueId, specs);
       if (!res.ok) {
         setError(res.error);
         for (const d of done) patch(d.row.id, { state: "error", note: "Not uploaded" });
@@ -67,7 +82,7 @@ export function PhotoUploader({ projectId, issueId }: { projectId: string; issue
         try {
           await put(t.main.url, t.main.headers, c.photo);
           await put(t.thumb.url, t.thumb.headers, c.thumb);
-          const saved = await completePhotoUpload(projectId, t.token, caption);
+          const saved = checklistItem ? await completeChecklistPhotoUpload(projectId, t.token, caption) : await completePhotoUpload(projectId, t.token, caption);
           if (saved.ok) patch(row.id, { state: "done", note: `Saved, ${c.width}×${c.height}, ${formatBytes(c.photo.size)}` });
           else patch(row.id, { state: "error", note: saved.error });
         } catch (e) {
@@ -84,7 +99,7 @@ export function PhotoUploader({ projectId, issueId }: { projectId: string; issue
     }
   }
 
-  const fieldId = `photo-input-${issueId ?? "project"}`;
+  const fieldId = `photo-input-${checklistItem?.itemId ?? issueId ?? "project"}`;
   return (
     <div className="space-y-2" data-testid="photo-uploader">
       <div>
@@ -93,7 +108,7 @@ export function PhotoUploader({ projectId, issueId }: { projectId: string; issue
       </div>
       <div>
         <label htmlFor={fieldId} className={`inline-flex cursor-pointer items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-dark ${busy ? "pointer-events-none opacity-50" : ""}`}>
-          {busy ? "Adding photos…" : "Add photos"}
+          {busy ? "Adding photos…" : buttonLabel}
         </label>
         <input
           ref={inputRef}

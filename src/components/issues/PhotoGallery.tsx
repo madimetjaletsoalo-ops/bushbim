@@ -11,6 +11,7 @@ const FILTERS: { id: GalleryFilter; label: string }[] = [
   { id: "issues", label: "On issues" },
   { id: "project", label: "Project photos" },
   { id: "checklists", label: "On checklists" },
+  { id: "daily-logs", label: "On daily logs" },
 ];
 
 /** ⭐ The project photo gallery, shown under both Issues and Document Control. */
@@ -22,15 +23,15 @@ export async function PhotoGallery({ ctx, basePath, filter, page }: { ctx: Issue
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">Photos</h2>
-          <p className="text-sm text-ink-soft">Site photos from issues, checklists and the project, newest first.</p>
+          <p className="text-sm text-ink-soft">Site photos from issues, checklists, daily logs and the project, newest first.</p>
         </div>
-        <nav aria-label="Photo filter" className="flex overflow-hidden rounded-md border border-line">
+        <nav aria-label="Photo filter" className="flex max-w-full overflow-x-auto rounded-md border border-line">
           {FILTERS.map((f) => (
             <Link
               key={f.id}
               href={href(f.id)}
               aria-current={filter === f.id ? "page" : undefined}
-              className={`px-3 py-1.5 text-sm font-medium ${filter === f.id ? "bg-brand text-white" : "bg-surface hover:bg-muted"}`}
+              className={`whitespace-nowrap px-3 py-1.5 text-sm font-medium ${filter === f.id ? "bg-brand text-white" : "bg-surface hover:bg-muted"}`}
             >
               {f.label}
             </Link>
@@ -50,7 +51,7 @@ export async function PhotoGallery({ ctx, basePath, filter, page }: { ctx: Issue
           projectId={ctx.project.id}
           timezone={ctx.project.timezone}
           showIssue
-          photos={photos.map((p) => ({ ...p, checklist: p.checklistItem?.checklist ?? null, canDelete: !p.checklistItem && canDeletePhoto(p, ctx.user.id, ctx.canManage || (!p.issueId && ctx.isAdmin)) }))}
+          photos={photos.map((p) => ({ ...p, checklist: p.checklistItem?.checklist ?? null, dailyLogDay: p.dailyLog ? p.dailyLog.date.toISOString().slice(0, 10) : null, canDelete: !p.checklistItem && !p.dailyLog && canDeletePhoto(p, ctx.user.id, ctx.canManage || (!p.issueId && ctx.isAdmin)) }))}
         />
       )}
       <div className="flex gap-2">
@@ -62,7 +63,7 @@ export async function PhotoGallery({ ctx, basePath, filter, page }: { ctx: Issue
 }
 
 export function parseGalleryParams(sp: { filter?: string; page?: string }) {
-  const filter: GalleryFilter = sp.filter === "issues" || sp.filter === "project" || sp.filter === "checklists" ? sp.filter : "all";
+  const filter: GalleryFilter = sp.filter === "issues" || sp.filter === "project" || sp.filter === "checklists" || sp.filter === "daily-logs" ? sp.filter : "all";
   const page = Math.min(1000, Math.max(1, parseInt(sp.page ?? "1", 10) || 1));
   return { filter, page };
 }

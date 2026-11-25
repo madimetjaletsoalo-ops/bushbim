@@ -46,6 +46,20 @@ export const checklistPhotoClaims = z.object({
 });
 export type ChecklistPhotoClaims = z.infer<typeof checklistPhotoClaims>;
 
+/** A photo on a daily log. */
+export const dailyLogPhotoClaims = z.object({
+  typ: z.literal("daily_log_photo"),
+  pid: z.string(), // project
+  lid: z.string(), // daily log
+  uid: z.string(), // uploader
+  key: z.string(),
+  tkey: z.string(),
+  name: z.string(),
+  size: z.number().int().positive(),
+  tsize: z.number().int().positive(),
+});
+export type DailyLogPhotoClaims = z.infer<typeof dailyLogPhotoClaims>;
+
 /** Local-disk storage transfer (used when no S3 bucket is configured). */
 export const transferClaims = z.object({
   typ: z.literal("transfer"),
@@ -66,7 +80,7 @@ export function secretBytes(s = process.env.SESSION_SECRET): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-export async function signToken(claims: UploadClaims | TransferClaims | PhotoClaims | ChecklistPhotoClaims, secret: Uint8Array, ttlSeconds: number) {
+export async function signToken(claims: UploadClaims | TransferClaims | PhotoClaims | ChecklistPhotoClaims | DailyLogPhotoClaims, secret: Uint8Array, ttlSeconds: number) {
   return new SignJWT({ ...claims })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

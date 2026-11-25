@@ -18,7 +18,7 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Field Management: issues (type and subtype, assignee by user, role or company, due date, location tree, root cause, custom attributes, watchers, comments, activity), **custom statuses per project with sub-statuses**, filter panel, coloured status-bar table, CSV export; Creators edit only their own issues, assignees update status | ✅ Built (item 5) |
 | Field Management: issue pins on sheets in the viewer (status-coloured, "New issue here" from the sheet), issue photos compressed in the browser to a JPEG at most 1600 px wide with thumbnails, **project photo gallery under Issues and inside Document Control** | ✅ Built (item 6) |
 | Field Management: checklists (template builder with sections and yes/no/N/A, text, number, date, signature and photo items; starter templates "Villa handover snag list (luxury finishes)", "Thatch roof inspection" and "Pool commissioning"; assigned to a person or company at a location; who answered and who completed, and when; one-click issue from a failed item; PDF of the result) | ✅ Built (item 9) |
-| Field Management: daily logs | Backlog item 10 |
+| Field Management: daily logs (one per day; weather auto-filled from Open-Meteo for the project's coordinates and editable; labour per company with man-hour totals, equipment, visitors, work log, notes and photos; **custom checklist items on the log template**; **mandatory work log option**; **subcontractors fill in their own company's labour and work**; publishing locks the log, reopen within 24 h, then Managers only; PDF export) | ✅ Built (item 10) |
 
 ## Stack
 
@@ -55,13 +55,14 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/daily-logs/     Daily Logs: access, publishing rules, labour totals, input schemas, Open-Meteo request/parse (pure + unit tested), server actions, photos, PDF export
 src/modules/checklists/     Checklists: access, answers, progress, starter templates (pure + unit tested), server actions, photo items, PDF export
 src/modules/issues/         Issues: access rules, statuses, filters, dates, attributes and CSV (pure + unit tested), server actions, defaults; pins and photos (media*.ts)
 src/modules/transmittals/   Transmittals: recipient parsing, signed link tokens, expiry and search (pure + unit tested), server actions, public link resolver
 src/modules/reviews/        Reviews: workflow/step logic (pure + unit tested), server actions, auto-start, copy approved, PDF export
 src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
-src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,checklists,field}/   modules
+src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,checklists,daily-logs}/   modules
 src/app/(public)/t/[token]  no-login transmittal download page (files via /api/t/[token]/[fileId])
 ```
 
@@ -143,3 +144,13 @@ Checklists (`src/modules/checklists/`):
 - An item answered **No** is marked failed: anyone with Issues Creator access can **Raise issue** in one click. The issue is titled after the item, placed at the checklist's location, assigned like the checklist, and links back to it. The note on the item is copied into its description.
 - Photo items use the same on-device compression as issue photos (at most 1600 px wide JPEG). Their photos appear in the gallery under *On checklists*. Signatures are stored as small PNGs (at most 80 KB).
 - **Download PDF** produces the result: details, every answer with who and when, notes, raised issues, signatures and photo thumbnails.
+
+Daily Logs (`src/modules/daily-logs/`):
+
+- One log per project per calendar day in the project's time zone; future days can't be started. *Today* in the side menu opens today's log, and any earlier day can be opened from the list.
+- Starting a log fetches the day's weather (conditions, min/max °C, rain, wind) from Open-Meteo for the project's coordinates, set by Daily Logs Managers under *Settings*. The forecast API is used for the last 90 days and the archive API before that. Site teams can edit the reading or fetch it again; an edited reading is marked "Entered on site". Set `OPEN_METEO_URL=off` to switch the lookup off.
+- Sections: labour and work per company or crew (trade, headcount, hours each, work carried out, with headcount and man-hour totals), equipment, visitors (times in and out), the work log, notes and photos (compressed on the device like issue photos; they also appear in the gallery under *On daily logs*).
+- Viewers read logs. Creators start logs, edit every section of a draft and publish. ⭐ A Viewer who belongs to a company is treated as a subcontractor: on a draft they add and edit **their own company's** labour and work rows and add photos, without broader rights.
+- ⭐ Managers add custom checklist items (Yes / No / N/A, text or number, optionally required) to the log template; new logs copy them. ⭐ Managers can make the work log mandatory: publishing then needs the work log, or a company's work description, filled in. Required items must be answered before publishing.
+- Publishing locks the log. Creators can reopen it within 24 hours of publishing; after that only Daily Logs Managers (and project admins) can. Managers can delete a log.
+- **Download PDF** produces the day's log with weather, labour and work, equipment, visitors, the checklist, notes and photo thumbnails.

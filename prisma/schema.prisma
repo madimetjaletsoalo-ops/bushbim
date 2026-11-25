@@ -62,18 +62,23 @@ model User {
   checklistsCreated    Checklist[]            @relation("ChecklistsCreated")
   checklistsCompleted  Checklist[]            @relation("ChecklistsCompleted")
   checklistAnswers     ChecklistItem[]
+  dailyLogsCreated     DailyLog[]             @relation("DailyLogsCreated")
+  dailyLogsPublished   DailyLog[]             @relation("DailyLogsPublished")
+  dailyLogLabour       DailyLogLabour[]
+  dailyLogAnswers      DailyLogItem[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
 model Company {
-  id        String          @id @default(cuid())
-  accountId String
-  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name      String
-  trade     String?
-  country   String?
-  createdAt DateTime        @default(now())
-  members   ProjectMember[]
+  id             String           @id @default(cuid())
+  accountId      String
+  account        Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name           String
+  trade          String?
+  country        String?
+  createdAt      DateTime         @default(now())
+  members        ProjectMember[]
+  dailyLogLabour DailyLogLabour[]
 
   @@unique([accountId, name])
 }
@@ -95,22 +100,25 @@ enum ProjectStatus {
 }
 
 model Project {
-  id                 String              @id @default(cuid())
+  id                 String                 @id @default(cuid())
   accountId          String
-  account            Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account            Account                @relation(fields: [accountId], references: [id], onDelete: Cascade)
   name               String
   code               String?
   type               String?
   location           String?
   country            String?
-  currency           String              @default("ZAR")
-  timezone           String              @default("Africa/Johannesburg")
+  currency           String                 @default("ZAR")
+  timezone           String                 @default("Africa/Johannesburg")
   startDate          DateTime?
   endDate            DateTime?
-  status             ProjectStatus       @default(ACTIVE)
+  status             ProjectStatus          @default(ACTIVE)
   /// cover photo shown in the project list, e.g. "/projects/kruger-lodge-villas.webp"
   coverImage         String?
-  createdAt          DateTime            @default(now())
+  /// site coordinates (decimal degrees), used for Daily Log weather
+  latitude           Float?
+  longitude          Float?
+  createdAt          DateTime               @default(now())
   members            ProjectMember[]
   permissions        ServicePermission[]
   auditEvents        AuditEvent[]
@@ -131,6 +139,9 @@ model Project {
   photos             Photo[]
   checklistTemplates ChecklistTemplate[]
   checklists         Checklist[]
+  dailyLogSettings   DailyLogSettings?
+  dailyLogItems      DailyLogTemplateItem[]
+  dailyLogs          DailyLog[]
 
   @@unique([accountId, name])
 }
@@ -826,6 +837,9 @@ model Photo {
   /// set for a photo answering a checklist's photo item
   checklistItemId String?
   checklistItem   ChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  /// set for a photo on a daily log
+  dailyLogId      String?
+  dailyLog        DailyLog?      @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
   storageKey      String         @unique
   thumbKey        String         @unique
   fileName        String
@@ -840,6 +854,7 @@ model Photo {
   @@index([projectId, createdAt])
   @@index([issueId])
   @@index([checklistItemId])
+  @@index([dailyLogId])
 }
 
 // ---------- Checklists ----------
@@ -970,4 +985,153 @@ model ChecklistItem {
   photos       Photo[]
 
   @@index([checklistId, order])
+}
+
+// ---------- Daily Logs ----------
+
+/// Per-project Daily Log settings (Daily Logs Managers).
+model DailyLogSettings {
+  projectId       String   @id
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// publishing needs the work carried out to be filled in
+  workLogRequired Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+}
+
+enum DailyLogItemKind {
+  /// Yes / No / N/A
+  YES_NO
+  TEXT
+  NUMBER
+}
+
+/// A custom checklist item admins add to the log template. Copied into each new log.
+model DailyLogTemplateItem {
+  id        String           @id @default(cuid())
+  projectId String
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label     String
+  kind      DailyLogItemKind @default(YES_NO)
+  required  Boolean          @default(false)
+  order     Int              @default(0)
+  createdAt DateTime         @default(now())
+
+  @@index([projectId, order])
+}
+
+enum DailyLogStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum WeatherSource {
+  /// fetched from Open-Meteo for the project's coordinates
+  AUTO
+  /// typed in, or an automatic reading edited by hand
+  MANUAL
+}
+
+/// One log per project per calendar day (in the project's time zone).
+model DailyLog {
+  id            String              @id @default(cuid())
+  projectId     String
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// the calendar day, stored as UTC midnight
+  date          DateTime            @db.Date
+  status        DailyLogStatus      @default(DRAFT)
+  weatherSource WeatherSource?
+  weatherCode   Int?
+  /// e.g. "Partly cloudy", "Thunderstorm"
+  conditions    String?
+  tempMin       Float?
+  tempMax       Float?
+  /// millimetres
+  precipitation Float?
+  /// km/h
+  windMax       Float?
+  weatherNote   String?
+  /// work carried out today (the work log)
+  workSummary   String?
+  notes         String?
+  createdById   String?
+  createdBy     User?               @relation("DailyLogsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?               @relation("DailyLogsPublished", fields: [publishedById], references: [id], onDelete: SetNull)
+  labour        DailyLogLabour[]
+  equipment     DailyLogEquipment[]
+  visitors      DailyLogVisitor[]
+  items         DailyLogItem[]
+  photos        Photo[]
+
+  @@unique([projectId, date])
+}
+
+/// Labour and work for one company (or crew) on the day. Subcontractors fill in their own.
+model DailyLogLabour {
+  id          String   @id @default(cuid())
+  logId       String
+  log         DailyLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  /// the company's name when the row was written (or a crew name without a company)
+  companyName String
+  trade       String?
+  headcount   Int
+  hours       Float
+  /// the work this company carried out
+  work        String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([logId])
+}
+
+model DailyLogEquipment {
+  id        String   @id @default(cuid())
+  logId     String
+  log       DailyLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  name      String
+  quantity  Int      @default(1)
+  hours     Float?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([logId])
+}
+
+model DailyLogVisitor {
+  id           String   @id @default(cuid())
+  logId        String
+  log          DailyLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  name         String
+  organisation String?
+  purpose      String?
+  /// "HH:MM"
+  arrivedAt    String?
+  leftAt       String?
+  createdAt    DateTime @default(now())
+
+  @@index([logId])
+}
+
+/// A custom checklist item on a log, copied from the template when the log was started.
+model DailyLogItem {
+  id           String           @id @default(cuid())
+  logId        String
+  log          DailyLog         @relation(fields: [logId], references: [id], onDelete: Cascade)
+  label        String
+  kind         DailyLogItemKind
+  required     Boolean          @default(false)
+  order        Int              @default(0)
+  /// YES_NO: "YES" | "NO" | "NA"; TEXT / NUMBER: the text
+  value        String?
+  answeredById String?
+  answeredBy   User?            @relation(fields: [answeredById], references: [id], onDelete: SetNull)
+  answeredAt   DateTime?
+
+  @@index([logId, order])
 }

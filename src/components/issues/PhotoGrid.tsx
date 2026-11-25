@@ -14,6 +14,8 @@ export type GridPhoto = {
   uploadedBy: { name: string } | null;
   issue?: { id: string; number: number; title: string } | null;
   checklist?: { id: string; number: number; title: string } | null;
+  /** "YYYY-MM-DD" of the daily log the photo is on */
+  dailyLogDay?: string | null;
   canDelete: boolean;
 };
 
@@ -47,6 +49,10 @@ export function PhotoGrid({ projectId, photos, timezone, showIssue }: { projectI
               ) : p.checklist ? (
                 <Link href={`/projects/${projectId}/checklists/${p.checklist.id}`} className="block truncate font-medium text-brand hover:underline" data-testid="photo-checklist">
                   {checklistLabel(p.checklist.number)} {p.checklist.title}
+                </Link>
+              ) : p.dailyLogDay ? (
+                <Link href={`/projects/${projectId}/daily-logs/${p.dailyLogDay}`} className="block truncate font-medium text-brand hover:underline" data-testid="photo-daily-log">
+                  Daily log {p.dailyLogDay}
                 </Link>
               ) : (
                 <p className="text-ink-soft">Project photo</p>

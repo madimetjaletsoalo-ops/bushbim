@@ -19,6 +19,7 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Field Management: issue pins on sheets in the viewer (status-coloured, "New issue here" from the sheet), issue photos compressed in the browser to a JPEG at most 1600 px wide with thumbnails, **project photo gallery under Issues and inside Document Control** | ✅ Built (item 6) |
 | Field Management: checklists (template builder with sections and yes/no/N/A, text, number, date, signature and photo items; starter templates "Villa handover snag list (luxury finishes)", "Thatch roof inspection" and "Pool commissioning"; assigned to a person or company at a location; who answered and who completed, and when; one-click issue from a failed item; PDF of the result) | ✅ Built (item 9) |
 | Field Management: daily logs (one per day; weather auto-filled from Open-Meteo for the project's coordinates and editable; labour per company with man-hour totals, equipment, visitors, work log, notes and photos; **custom checklist items on the log template**; **mandatory work log option**; **subcontractors fill in their own company's labour and work**; publishing locks the log, reopen within 24 h, then Managers only; PDF export) | ✅ Built (item 10) |
+| Platform: full-text search (text read in the background from PDFs, **OCR of scanned PDFs and photos of documents with tesseract**, Word and Excel, indexed with Postgres `tsvector`); one search across documents, issues, reviews and transmittals with highlighted snippets, phrases, OR and exclusions; **naming-pattern and regular-expression filters on names, including "doesn't match" to find files off the naming convention**; results respect folder and module access | ✅ Built (item 11) |
 
 ## Stack
 
@@ -55,6 +56,7 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/search/         Full-text search: query parsing, name patterns, DOCX/XLSX readers, PNG wrapper for OCR (pure + unit tested), extractor (pdf.js text, tesseract OCR), background indexer, search queries
 src/modules/daily-logs/     Daily Logs: access, publishing rules, labour totals, input schemas, Open-Meteo request/parse (pure + unit tested), server actions, photos, PDF export
 src/modules/checklists/     Checklists: access, answers, progress, starter templates (pure + unit tested), server actions, photo items, PDF export
 src/modules/issues/         Issues: access rules, statuses, filters, dates, attributes and CSV (pure + unit tested), server actions, defaults; pins and photos (media*.ts)
@@ -62,7 +64,7 @@ src/modules/transmittals/   Transmittals: recipient parsing, signed link tokens,
 src/modules/reviews/        Reviews: workflow/step logic (pure + unit tested), server actions, auto-start, copy approved, PDF export
 src/modules/docs/           Document Control: server actions, folder permissions (pure resolver + per-request access check), folder/sort/version logic, signed upload tokens
 src/app/(auth)/             login, signup, invite acceptance
-src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,checklists,daily-logs}/   modules
+src/app/(app)/projects/[projectId]/{admin,docs,reviews,transmittals,issues,checklists,daily-logs,search}/   modules
 src/app/(public)/t/[token]  no-login transmittal download page (files via /api/t/[token]/[fileId])
 ```
 
@@ -101,6 +103,8 @@ Every module checks access through `can(member, service, action, grants)` in `sr
    - `DATABASE_URL`: the transaction-pooler URL
    - `DIRECT_URL`: the session/direct URL
    - `SESSION_SECRET`: 32+ random characters
+   - `CRON_SECRET`: 16+ random characters. Vercel's cron (see `vercel.json`) then calls `/api/jobs/index-text` nightly to finish any search indexing left over.
+   - optional `OCR=off`: skip OCR (scanned PDFs and images are then found by name only).
    - optional `SEED_DEMO=1`: loads the demo organisation (login `admin@bushbim.test` / `bushbim123`). Remove it, and change that password, before real use.
 3. File storage for Document Control (required on Vercel, which has no persistent disk). Any S3-compatible bucket works, including Supabase Storage (Project Settings → Storage → S3 connection):
    - `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
@@ -154,3 +158,12 @@ Daily Logs (`src/modules/daily-logs/`):
 - ⭐ Managers add custom checklist items (Yes / No / N/A, text or number, optionally required) to the log template; new logs copy them. ⭐ Managers can make the work log mandatory: publishing then needs the work log, or a company's work description, filled in. Required items must be answered before publishing.
 - Publishing locks the log. Creators can reopen it within 24 hours of publishing; after that only Daily Logs Managers (and project admins) can. Managers can delete a log.
 - **Download PDF** produces the day's log with weather, labour and work, equipment, visitors, the checklist, notes and photo thumbnails.
+
+Search (`src/modules/search/`):
+
+- *Search* in the project bar searches everything the member can open: documents (latest versions, in folders they have View on), issues (drafts only for their creator and Managers), reviews and transmittals (same rules as their pages).
+- Uploads are queued for indexing and read in the background right after the upload finishes (Next.js `after`). PDFs use their text layer; a PDF whose pages carry almost no text counts as scanned and its page images (JPEG or Flate gray/RGB; up to 40 pages) are read with tesseract OCR, as are JPEG/PNG uploads. Word (.docx) and Excel (.xlsx) text is unzipped and read from their XML with size limits. Other files are found by name. Up to 300,000 characters per file are kept.
+- Each version's text goes into `DocumentText.search` (a `tsvector`, GIN-indexed; file name weighted above content). Issues, reviews and transmittals are matched with `to_tsvector` at query time, which is quick at project scale.
+- Query syntax: words are ANDed and match their beginnings and word forms (*waterproof* finds *waterproofing*); `"exact phrase"`; codes like `KLV-ARC-101` match as a phrase; `OR`; `-word` excludes; `#12` or `T-3` finds by number.
+- ⭐ Name filters apply to file names, issue titles, review names and transmittal subjects: a naming pattern (`#` digit, `@` letter, `?` any character, `*` anything; the extension is optional) or a regular expression (run by Postgres with a 5-second limit). Tick "don't match" to list names that break the convention. A name filter works with or without search words.
+- Project admins see the index status (indexed, queued, name only, failed with the reason) and can index queued files now or re-index the whole project. A failed file is retried up to 3 times.

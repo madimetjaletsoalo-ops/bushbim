@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -13,6 +14,7 @@ import { secretBytes, signToken, uploadClaims, verifyToken } from "./token";
 import { folderAccess } from "./access";
 import { syncSheetsForVersion } from "./sheets-server";
 import { autoStartReviews } from "@/modules/reviews/server";
+import { queueVersion, runIndexJobs } from "@/modules/search/indexer";
 import { DEFAULT_SUBJECT_ID, FOLDER_LEVELS, FOLDER_LEVEL_LABELS, buildIndex, folderLevel, levelAtLeast, type FolderGrant } from "./folder-permissions";
 
 const UPLOAD_TOKEN_TTL = 60 * 60;
@@ -220,6 +222,13 @@ export async function completeUpload(projectId: string, token: string): Promise<
     if (await autoStartReviews(projectId, c.fid, doc.versionId, ctx.user.id)) revalidatePath(`/projects/${projectId}/reviews`, "layout");
   } catch (e) {
     console.error("reviews: auto-start failed for", doc.name, e);
+  }
+  // full-text search: read the file's text (OCR for scans) once the response is sent
+  try {
+    await queueVersion(projectId, doc.versionId);
+    after(() => runIndexJobs({ limit: 10 }).catch((e) => console.error("search: index run failed", e)));
+  } catch (e) {
+    console.error("search: couldn't queue", doc.name, e);
   }
   revalidateDocs(projectId);
   return { ok: true, name: doc.name, version: doc.currentVersion };

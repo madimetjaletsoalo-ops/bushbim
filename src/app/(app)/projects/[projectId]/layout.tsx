@@ -19,6 +19,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
             {can(member, "ISSUES", "view", grants) && <NavLink href={`${base}/issues`}>Issues</NavLink>}
             {can(member, "CHECKLISTS", "view", grants) && <NavLink href={`${base}/checklists`}>Checklists</NavLink>}
             {can(member, "DAILY_LOGS", "view", grants) && <NavLink href={`${base}/daily-logs`}>Daily Logs</NavLink>}
+            {(can(member, "DOCS", "view", grants) || can(member, "ISSUES", "view", grants)) && <NavLink href={`${base}/search`}>Search</NavLink>}
             {isAdmin && <NavLink href={`${base}/admin`}>Project Admin</NavLink>}
           </nav>
         </div>

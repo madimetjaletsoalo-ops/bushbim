@@ -1,4 +1,6 @@
 import "server-only";
+import { after } from "next/server";
+import { queueVersion, runIndexJobs } from "@/modules/search/indexer";
 import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -226,6 +228,18 @@ export async function copyApprovedFiles(reviewId: string, folderId: string, acto
       await syncSheetsForVersion(review.projectId, id);
     } catch (e) {
       console.error("sheets: failed for copied", name, e);
+    }
+    try {
+      await queueVersion(review.projectId, id);
+    } catch (e) {
+      console.error("search: couldn't queue copied", name, e);
+    }
+  }
+  if (copied.length) {
+    try {
+      after(() => runIndexJobs({ limit: 10 }).catch((e) => console.error("search: index run failed", e)));
+    } catch {
+      // outside a request (scripts): the next scheduled run picks them up
     }
   }
   return copied.length;

@@ -142,6 +142,7 @@ model Project {
   dailyLogSettings   DailyLogSettings?
   dailyLogItems      DailyLogTemplateItem[]
   dailyLogs          DailyLog[]
+  documentTexts      DocumentText[]
 
   @@unique([accountId, name])
 }
@@ -305,6 +306,7 @@ model DocumentVersion {
   reviewDocuments      ReviewDocument[]
   transmittalDocuments TransmittalDocument[]
   issuePins            IssuePin[]
+  text                 DocumentText?
 
   @@unique([documentId, number])
 }
@@ -1134,4 +1136,50 @@ model DailyLogItem {
   answeredAt   DateTime?
 
   @@index([logId, order])
+}
+
+// ---------- Full-text search ----------
+
+enum TextIndexStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+enum TextIndexMethod {
+  PDF_TEXT
+  OCR
+  DOCX
+  XLSX
+  TEXT
+  NONE
+}
+
+/// Text extracted from a document version by the background indexer, searchable through `search`.
+model DocumentText {
+  id         String                   @id @default(cuid())
+  projectId  String
+  project    Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionId  String                   @unique
+  version    DocumentVersion          @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  status     TextIndexStatus          @default(PENDING)
+  method     TextIndexMethod?
+  /// normalised text, capped (see MAX_TEXT_CHARS)
+  text       String                   @default("")
+  chars      Int                      @default(0)
+  pages      Int?
+  error      String?
+  attempts   Int                      @default(0)
+  startedAt  DateTime?
+  indexedAt  DateTime?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+  /// file name (weight A) + text (weight B), written by the indexer with raw SQL
+  search     Unsupported("tsvector")?
+
+  @@index([projectId, status])
+  @@index([status, updatedAt])
+  @@index([search], type: Gin)
 }

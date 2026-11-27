@@ -20,6 +20,7 @@ The workflows follow the established BIM 360 / Autodesk Construction Cloud model
 | Field Management: checklists (template builder with sections and yes/no/N/A, text, number, date, signature and photo items; starter templates "Villa handover snag list (luxury finishes)", "Thatch roof inspection" and "Pool commissioning"; assigned to a person or company at a location; who answered and who completed, and when; one-click issue from a failed item; PDF of the result) | ✅ Built (item 9) |
 | Field Management: daily logs (one per day; weather auto-filled from Open-Meteo for the project's coordinates and editable; labour per company with man-hour totals, equipment, visitors, work log, notes and photos; **custom checklist items on the log template**; **mandatory work log option**; **subcontractors fill in their own company's labour and work**; publishing locks the log, reopen within 24 h, then Managers only; PDF export) | ✅ Built (item 10) |
 | Platform: full-text search (text read in the background from PDFs, **OCR of scanned PDFs and photos of documents with tesseract**, Word and Excel, indexed with Postgres `tsvector`); one search across documents, issues, reviews and transmittals with highlighted snippets, phrases, OR and exclusions; **naming-pattern and regular-expression filters on names, including "doesn't match" to find files off the naming convention**; results respect folder and module access | ✅ Built (item 11) |
+| Platform: **installable app (PWA) that works offline**: sheets, issues and checklists opened recently (plus Issues, New issue and Checklists, kept ahead of time) open without a connection; new issues, checklist answers and photos made offline are kept on the device and sync when the connection is back, applied once each, with **conflict notices** (keep theirs or use mine) when someone else changed the same thing; notifications (issue or checklist assigned, issue status changed, new comment) by email and **WhatsApp (Cloud API, opt-in per user, STOP to opt out)** | ✅ Built (item 12) |
 
 ## Stack
 
@@ -56,6 +57,10 @@ src/lib/auth.ts             current user, project context, admin guards
 src/lib/session.ts          signed session cookie
 src/lib/storage.ts          file storage: presigned S3/MinIO URLs, or local disk (.storage/) when S3_BUCKET is unset
 src/modules/admin/          Project Admin server actions
+src/modules/offline/       Offline sync: change schemas, sync order, answer merging and conflict detection (pure + unit tested), server sync actions with an idempotency ledger
+src/modules/notifications/ Notifications: phone numbers, WhatsApp payloads, recipients (pure + unit tested), email/WhatsApp sender, events, preferences
+src/components/offline/    Browser side of offline: IndexedDB outbox, sync engine, offline bar, offline changes page, sign-out that clears cached pages
+public/sw.js               Service worker: caches recently opened pages, sheets and photos (network first), build assets, offline fallback page
 src/modules/search/         Full-text search: query parsing, name patterns, DOCX/XLSX readers, PNG wrapper for OCR (pure + unit tested), extractor (pdf.js text, tesseract OCR), background indexer, search queries
 src/modules/daily-logs/     Daily Logs: access, publishing rules, labour totals, input schemas, Open-Meteo request/parse (pure + unit tested), server actions, photos, PDF export
 src/modules/checklists/     Checklists: access, answers, progress, starter templates (pure + unit tested), server actions, photo items, PDF export

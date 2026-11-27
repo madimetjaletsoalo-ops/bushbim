@@ -127,6 +127,8 @@ export default async function ChecklistPage({ params }: { params: Promise<{ proj
 
 function ItemRow({ item: i, projectId, checklistId, canAnswer, canRaise, fmt }: { item: Item; projectId: string; checklistId: string; canAnswer: boolean; canRaise: boolean; fmt: Intl.DateTimeFormat }) {
   const answer = answerItem.bind(null, projectId, checklistId, i.id);
+  // answers given offline are kept on the device; `base` is what this page showed, to spot conflicts when they sync
+  const offline = { kind: "checklist.answer" as const, projectId, checklistId, itemId: i.id, label: i.label, base: { value: i.value, note: i.note } };
   const done = isAnswered({ ...i, photoCount: i.photos.length });
   const failed = isFailed(i);
   const text = answerText({ ...i, photoCount: i.photos.length });
@@ -145,7 +147,7 @@ function ItemRow({ item: i, projectId, checklistId, canAnswer, canRaise, fmt }: 
 
       {i.kind === "YES_NO" &&
         (canAnswer ? (
-          <ActionForm action={answer} resetOnSuccess={false} testId="yes-no-form">
+          <ActionForm action={answer} resetOnSuccess={false} testId="yes-no-form" offline={offline}>
             <div className="flex gap-2" role="group" aria-label={`Answer: ${i.label}`}>
               {YES_NO.map((v) => (
                 <button
@@ -167,7 +169,7 @@ function ItemRow({ item: i, projectId, checklistId, canAnswer, canRaise, fmt }: 
 
       {(i.kind === "TEXT" || i.kind === "NUMBER" || i.kind === "DATE") &&
         (canAnswer ? (
-          <ActionForm action={answer} resetOnSuccess={false} className="flex max-w-xl flex-wrap items-start gap-2" testId="value-form">
+          <ActionForm action={answer} resetOnSuccess={false} className="flex max-w-xl flex-wrap items-start gap-2" testId="value-form" offline={offline}>
             {i.kind === "TEXT" ? (
               <textarea name="value" className={`${input} min-w-0 flex-1`} rows={2} maxLength={LIMITS.text} defaultValue={i.value ?? ""} aria-label={`Answer: ${i.label}`} />
             ) : (
@@ -192,14 +194,14 @@ function ItemRow({ item: i, projectId, checklistId, canAnswer, canRaise, fmt }: 
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={i.value} alt={`Signature for ${i.label}`} width={240} height={80} className="rounded border border-line bg-white" data-testid="signature-image" />
             {canAnswer && (
-              <ActionForm action={answer}>
+              <ActionForm action={answer} offline={offline}>
                 <input type="hidden" name="value" value="" />
                 <button type="submit" className="text-sm font-medium text-red-700 hover:underline">Clear signature</button>
               </ActionForm>
             )}
           </div>
         ) : canAnswer ? (
-          <ActionForm action={answer} testId="signature-form">
+          <ActionForm action={answer} testId="signature-form" offline={offline}>
             <SignaturePad label={`Sign: ${i.label}`} />
           </ActionForm>
         ) : (
@@ -234,7 +236,7 @@ function ItemRow({ item: i, projectId, checklistId, canAnswer, canRaise, fmt }: 
       {failed && (
         <div className="space-y-2">
           {canAnswer ? (
-            <ActionForm action={answer} resetOnSuccess={false} className="flex max-w-xl flex-wrap items-start gap-2" testId="note-form">
+            <ActionForm action={answer} resetOnSuccess={false} className="flex max-w-xl flex-wrap items-start gap-2" testId="note-form" offline={offline}>
               <input type="hidden" name="value" value={i.value ?? ""} />
               <input name="note" className={`${input} min-w-0 flex-1`} maxLength={LIMITS.note} defaultValue={i.note ?? ""} aria-label={`Note: ${i.label}`} placeholder="What's wrong? (copied to the issue)" />
               <SubmitButton className={btnGhost}>Save note</SubmitButton>

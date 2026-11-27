@@ -120,7 +120,7 @@ export function Viewer(p: Props) {
         }
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        const doc = await pdfjs.getDocument({ url: p.src }).promise;
+        const doc = await pdfjs.getDocument({ url: p.src, disableRange: true }).promise;
         if (cancelled) return void doc.destroy();
         docRef.current = doc;
         setNumPages(doc.numPages);

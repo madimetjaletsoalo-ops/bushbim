@@ -66,6 +66,15 @@ model User {
   dailyLogsPublished   DailyLog[]             @relation("DailyLogsPublished")
   dailyLogLabour       DailyLogLabour[]
   dailyLogAnswers      DailyLogItem[]
+  /// WhatsApp number in E.164 form ("+27821234567"); null until the user adds one
+  whatsappNumber       String?
+  /// the user agreed to receive notifications by WhatsApp (opt-in, off by default)
+  whatsappOptIn        Boolean                @default(false)
+  whatsappOptInAt      DateTime?
+  /// notification emails; on by default
+  emailNotifications   Boolean                @default(true)
+  notifications        Notification[]
+  offlineChanges       OfflineChange[]
 }
 
 /// A trade / organisation working on projects (GC, architect, MEP sub, ...).
@@ -143,6 +152,8 @@ model Project {
   dailyLogItems      DailyLogTemplateItem[]
   dailyLogs          DailyLog[]
   documentTexts      DocumentText[]
+  notifications      Notification[]
+  offlineChanges     OfflineChange[]
 
   @@unique([accountId, name])
 }
@@ -1182,4 +1193,86 @@ model DocumentText {
   @@index([projectId, status])
   @@index([status, updatedAt])
   @@index([search], type: Gin)
+}
+
+// ---------- Notifications (item 12: WhatsApp and email) ----------
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  FAILED
+  /// the channel is not configured, or the user has not opted in
+  SKIPPED
+}
+
+/// One message to one user, e.g. "Issue #12 was assigned to you". Sent on each channel the user allows.
+model Notification {
+  id         String                 @id @default(cuid())
+  userId     String
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId  String?
+  project    Project?               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// e.g. "issue.assigned", "issue.status_changed", "checklist.assigned", "test"
+  kind       String
+  title      String
+  body       String
+  /// app path the message links to, e.g. "/projects/…/issues/…"
+  link       String?
+  createdAt  DateTime               @default(now())
+  deliveries NotificationDelivery[]
+
+  @@index([userId, createdAt])
+}
+
+model NotificationDelivery {
+  id             String              @id @default(cuid())
+  notificationId String
+  notification   Notification        @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  channel        NotificationChannel
+  status         DeliveryStatus      @default(QUEUED)
+  /// the provider's message id (WhatsApp wamid, email id)
+  providerId     String?
+  error          String?
+  attempts       Int                 @default(0)
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+
+  @@unique([notificationId, channel])
+  @@index([status, createdAt])
+}
+
+// ---------- Offline sync (item 12) ----------
+
+enum OfflineChangeResult {
+  APPLIED
+  CONFLICT
+}
+
+/// Ledger of changes made offline and synced later, keyed by the id the device gave them,
+/// so a change sent twice (lost response, retry) is applied only once.
+model OfflineChange {
+  id        String              @id @default(cuid())
+  projectId String
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// the device's id for the change (random UUID)
+  clientId  String              @unique
+  /// "issue.create" | "checklist.answer" | "photo"
+  kind      String
+  result    OfflineChangeResult
+  /// id of what was created or changed (issue, checklist item, photo)
+  resultId  String?
+  message   String?
+  /// when the change was made on the device
+  madeAt    DateTime
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([projectId, userId, createdAt])
 }

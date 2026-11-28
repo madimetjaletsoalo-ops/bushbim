@@ -6,10 +6,10 @@ import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { ActionState } from "@/modules/admin/types";
-import { HEX_COLOR, changedFields, fieldLabels, issueLabel, issueSchema, parseAssignee, parseOptions, validateAttributes, type IssueInput } from "./logic";
-import { readPinFields } from "./media";
-import { pinTarget } from "./media-server";
-import { accessFor, createIssueRow, getIssuesContext, type IssuesContext } from "./server";
+import { HEX_COLOR, changedFields, fieldLabels, issueLabel, parseOptions } from "./logic";
+import { createIssueFromForm, resolveIssueForm } from "./form";
+import { actorOf, issueAssigned, issueCommented, issueStatusChanged } from "@/modules/notifications/events";
+import { accessFor, getIssuesContext, type IssuesContext } from "./server";
 
 // Access rules live in logic.ts (issueAccess). Every action re-checks them and writes an AuditEvent.
 
@@ -19,7 +19,6 @@ const str = (form: FormData, key: string) => {
   const v = form.get(key);
   return typeof v === "string" ? v : "";
 };
-const strings = (form: FormData, key: string) => [...new Set(form.getAll(key).filter((x): x is string => typeof x === "string" && !!x))];
 const idSchema = z.string().min(1).max(64);
 const nameSchema = z.string().trim().min(1, "Enter a name").max(60, "Keep names under 60 characters");
 const unique = (e: unknown) => typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002";
@@ -30,108 +29,12 @@ const refresh = (projectId: string) => revalidatePath(`/projects/${projectId}/is
 const audit = (ctx: IssuesContext, action: string, details: Prisma.InputJsonValue) =>
   db.auditEvent.create({ data: { actorId: ctx.user.id, projectId: ctx.project.id, action, details } });
 
-// ---------- issue fields ----------
-
-type Resolved = {
-  data: {
-    title: string;
-    description: string | null;
-    typeId: string | null;
-    subtypeId: string | null;
-    assigneeType: "USER" | "ROLE" | "COMPANY" | null;
-    assigneeId: string | null;
-    dueDate: Date | null;
-    locationId: string | null;
-    rootCauseId: string | null;
-    attributes: Record<string, string>;
-  };
-  statusId: string | null;
-  watcherIds: string[];
-};
-
-/** Validates the issue form and checks that every referenced type, status, person and place belongs to this project. */
-function resolveIssueForm(ctx: IssuesContext, form: FormData, existing?: { typeId: string | null; subtypeId: string | null }): Resolved | { error: string } {
-  const parsed = issueSchema.safeParse({
-    title: str(form, "title"),
-    description: str(form, "description"),
-    typeId: str(form, "typeId"),
-    subtypeId: str(form, "subtypeId"),
-    statusId: str(form, "statusId"),
-    assignee: str(form, "assignee"),
-    dueDate: str(form, "dueDate"),
-    locationId: str(form, "locationId"),
-    rootCauseId: str(form, "rootCauseId"),
-    watcherIds: strings(form, "watcherIds"),
-  });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  const v: IssueInput = parsed.data;
-
-  // a deactivated type or subtype may stay on an issue that already has it, but can't be newly chosen
-  const type = v.typeId ? ctx.types.find((t) => t.id === v.typeId && (t.active || t.id === existing?.typeId)) : null;
-  if (v.typeId && !type) return { error: "Choose a type from the list." };
-  const subtype = v.subtypeId ? type?.subtypes.find((s) => s.id === v.subtypeId && (s.active || s.id === existing?.subtypeId)) : null;
-  if (v.subtypeId && !subtype) return { error: "That subtype doesn't belong to the chosen type." };
-  if (v.statusId && !ctx.statuses.some((s) => s.id === v.statusId)) return { error: "Choose a status from the list." };
-  const assignee = v.assignee ? parseAssignee(v.assignee) : null;
-  if (v.assignee && (!assignee || !ctx.isAssignee(v.assignee))) return { error: "Assign the issue to a project member, a role or a company." };
-  if (v.locationId && !ctx.locations.some((l) => l.id === v.locationId)) return { error: "Choose a location from the list." };
-  if (v.rootCauseId && !ctx.rootCauses.some((r) => r.id === v.rootCauseId)) return { error: "Choose a root cause from the list." };
-  const memberIds = new Set(ctx.members.map((m) => m.userId));
-  if (v.watcherIds.some((id) => !memberIds.has(id))) return { error: "Watchers must be project members." };
-
-  const attrs = validateAttributes(
-    ctx.attributes,
-    Object.fromEntries(ctx.attributes.map((a) => [a.id, str(form, `attr_${a.id}`)])),
-  );
-  if ("error" in attrs) return attrs;
-
-  return {
-    data: {
-      title: v.title,
-      description: v.description || null,
-      typeId: type?.id ?? null,
-      subtypeId: subtype?.id ?? null,
-      assigneeType: assignee?.type ?? null,
-      assigneeId: assignee?.id ?? null,
-      dueDate: v.dueDate,
-      locationId: v.locationId,
-      rootCauseId: v.rootCauseId,
-      attributes: attrs.values,
-    },
-    statusId: v.statusId,
-    watcherIds: v.watcherIds,
-  };
-}
-
 export async function createIssue(projectId: string, _: ActionState, form: FormData): Promise<ActionState> {
   const ctx = await getIssuesContext(projectId);
-  if (!ctx.canCreate) return fail("Creating issues needs Issues Creator access.");
-  const r = resolveIssueForm(ctx, form);
-  if ("error" in r) return fail(r.error);
-  const status = ctx.statuses.find((s) => s.id === r.statusId) ?? ctx.statuses.find((s) => s.isDefault) ?? ctx.statuses.find((s) => !s.draft && !s.closed);
-  if (!status) return fail("This project has no issue statuses. Ask a Manager to add one.");
-  // "New issue here" from the viewer carries a pin position
-  const pin = readPinFields((k) => str(form, k));
-  if (pin && "error" in pin) return fail(pin.error);
-  const target = pin ? await pinTarget(projectId, pin.versionId) : null;
-  if (pin && !target) return fail("You can't open the sheet this pin is on.");
-  const issue = await createIssueRow(
-    {
-      projectId,
-      ...r.data,
-      statusId: status.id,
-      createdById: ctx.user.id,
-      closedAt: status.closed ? new Date() : null,
-      ...(pin ? { pin: { create: { versionId: pin.versionId, page: pin.page, x: pin.x, y: pin.y, createdById: ctx.user.id } } } : {}),
-    },
-    // the creator watches their own issue
-    [...new Set([ctx.user.id, ...r.watcherIds])],
-    ctx.user.id,
-  );
-  if (pin && target)
-    await audit(ctx, "issue.pinned", { issueId: issue.id, number: issue.number, versionId: pin.versionId, document: target.document.name, page: pin.page, moved: false });
+  const r = await createIssueFromForm(ctx, form);
+  if (!r.ok) return fail(r.error);
   refresh(projectId);
-  redirect(`/projects/${projectId}/issues/${issue.id}`);
+  redirect(`/projects/${projectId}/issues/${r.issue.id}`);
 }
 
 async function loadIssue(ctx: IssuesContext, issueId: string) {
@@ -168,6 +71,8 @@ export async function updateIssue(projectId: string, issueId: string, _: ActionS
       },
     });
   });
+  if (r.data.assigneeType && (r.data.assigneeType !== issue.assigneeType || r.data.assigneeId !== issue.assigneeId))
+    await issueAssigned(actorOf(ctx), { id: issue.id, number: issue.number, title: r.data.title, assigneeType: r.data.assigneeType, assigneeId: r.data.assigneeId });
   refresh(projectId);
   return ok("Issue saved.");
 }
@@ -192,6 +97,7 @@ export async function changeIssueStatus(projectId: string, issueId: string, _: A
       data: { actorId: ctx.user.id, projectId, action: "issue.status_changed", details: { issueId: issue.id, number: issue.number, from: issue.status.name, to: status.name } },
     });
   });
+  await issueStatusChanged(actorOf(ctx), issue, issue.status.name, status.name);
   refresh(projectId);
   return ok(`Status changed to ${status.name}.`);
 }
@@ -206,6 +112,7 @@ export async function addIssueComment(projectId: string, issueId: string, _: Act
     db.issueComment.create({ data: { issueId, authorId: ctx.user.id, body: body.data } }),
     db.auditEvent.create({ data: { actorId: ctx.user.id, projectId, action: "issue.commented", details: { issueId, number: found.issue.number } } }),
   ]);
+  await issueCommented(actorOf(ctx), found.issue, body.data);
   refresh(projectId);
   return ok("Comment added.");
 }

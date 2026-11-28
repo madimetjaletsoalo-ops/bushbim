@@ -31,7 +31,7 @@ export default async function NewIssuePage({ params, searchParams }: { params: P
       <Link href={`/projects/${projectId}/issues`} className="text-sm text-ink-soft hover:underline">← Issues</Link>
       <h2 className="text-xl font-semibold">New issue</h2>
       <section className={`${card} p-5`}>
-        <ActionForm action={createIssue.bind(null, projectId)} resetOnSuccess={false} testId="issue-form" className="space-y-4">
+        <ActionForm action={createIssue.bind(null, projectId)} resetOnSuccess={false} testId="issue-form" className="space-y-4" offline={{ kind: "issue.create", projectId }}>
           {pin && target && (
             <div className="rounded-md border border-brand/30 bg-brand/5 px-3 py-2 text-sm" data-testid="pin-note">
               Will be pinned on {sheet ? `${sheet.number} ${sheet.title}` : target.document.name}, page {pin.page}.

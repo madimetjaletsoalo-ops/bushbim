@@ -3,6 +3,7 @@ import { Logo } from "@/components/Logo";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { SignOutButton } from "@/components/offline/SignOutButton";
 import { signOut } from "@/modules/admin/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -31,10 +32,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Add people to projects
               </Link>
             )}
-            <span className="hidden text-chrome-ink/80 sm:inline" title={user.email}>{user.name}</span>
-            <form action={signOut}>
-              <button className="rounded-md border border-white/15 px-2 py-1 text-xs hover:bg-white/10">Sign out</button>
-            </form>
+            <Link href="/account/notifications" className="text-chrome-ink/80 hover:text-white" title={user.email} data-testid="account-link">
+              <span className="hidden sm:inline">{user.name}</span>
+              <span className="sm:hidden">Account</span>
+            </Link>
+            <SignOutButton action={signOut} />
           </div>
         </div>
       </header>

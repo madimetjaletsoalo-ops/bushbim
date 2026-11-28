@@ -9,6 +9,8 @@ import { completeDailyLogPhotoUpload, requestDailyLogPhotoUploads } from "@/modu
 import { completePhotoUpload, requestPhotoUploads } from "@/modules/issues/media-actions";
 import { MAX_CAPTION, MAX_PHOTOS_PER_UPLOAD, PHOTO_MAX_WIDTH } from "@/modules/issues/media";
 import { compressPhoto, type Compressed } from "./compress";
+import { queuePhoto } from "@/components/offline/photos";
+import { isNetworkError, type PhotoTarget } from "@/modules/offline/logic";
 
 type Row = { id: number; name: string; state: "compressing" | "uploading" | "done" | "error"; note?: string };
 
@@ -70,12 +72,43 @@ export function PhotoUploader({
         }
       }
       if (!done.length) return;
-      const specs = done.map((d) => ({ name: d.file.name, size: d.c.photo.size, thumbSize: d.c.thumb.size }));
-      const res = checklistItem
-        ? await requestChecklistPhotoUploads(projectId, checklistItem.checklistId, checklistItem.itemId, specs)
+      // no connection: keep the compressed photos on this device and sync them later
+      const target: PhotoTarget | null = checklistItem
+        ? { type: "checklist", checklistId: checklistItem.checklistId, itemId: checklistItem.itemId }
         : dailyLogId
-          ? await requestDailyLogPhotoUploads(projectId, dailyLogId, specs)
-          : await requestPhotoUploads(projectId, issueId, specs);
+          ? null
+          : issueId
+            ? { type: "issue", issueId }
+            : { type: "project" };
+      const keepOffline = async () => {
+        if (!target) {
+          setError("Daily log photos need a connection. Try again when you're back online.");
+          for (const d of done) patch(d.row.id, { state: "error", note: "Not uploaded" });
+          return;
+        }
+        for (const d of done) {
+          try {
+            await queuePhoto(projectId, target, d.file.name, caption, d.c);
+            patch(d.row.id, { state: "done", note: "Saved on this device. It will upload when you're back online." });
+          } catch (e) {
+            patch(d.row.id, { state: "error", note: (e as Error).message });
+          }
+        }
+        setCaption("");
+      };
+      if (!navigator.onLine) return void (await keepOffline());
+      const specs = done.map((d) => ({ name: d.file.name, size: d.c.photo.size, thumbSize: d.c.thumb.size }));
+      let res: Awaited<ReturnType<typeof requestPhotoUploads>>;
+      try {
+        res = checklistItem
+          ? await requestChecklistPhotoUploads(projectId, checklistItem.checklistId, checklistItem.itemId, specs)
+          : dailyLogId
+            ? await requestDailyLogPhotoUploads(projectId, dailyLogId, specs)
+            : await requestPhotoUploads(projectId, issueId, specs);
+      } catch (e) {
+        if (isNetworkError(e)) return void (await keepOffline());
+        throw e;
+      }
       if (!res.ok) {
         setError(res.error);
         for (const d of done) patch(d.row.id, { state: "error", note: "Not uploaded" });

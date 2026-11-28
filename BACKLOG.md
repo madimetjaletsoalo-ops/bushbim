@@ -36,7 +36,7 @@ The product owner can reorder, add or delete items at any time. Write each new i
 
 ## Platform
 
-- [ ] **11. Full-text search** ⭐
+- [x] **11. Full-text search** ⭐ (2026-11-26). Background indexer reads PDF text layers, OCRs scanned PDFs and image uploads (tesseract, WebAssembly), and reads DOCX/XLSX into a GIN-indexed Postgres `tsvector`; one search page across documents, issues, reviews and transmittals with snippets, phrases, OR, exclusions and #numbers, honouring folder and module access; ⭐ naming-pattern and regex filters on names, with "doesn't match"; admin index status and re-index; nightly cron for leftovers.
   Done when: text from uploaded PDFs (OCR for scanned PDFs via tesseract), DOCX and XLSX is extracted in a background job and indexed (Postgres `tsvector`); global search covers documents, issues, reviews and transmittals; ⭐ searches can use a regex or naming-pattern filter.
 - [ ] **12. Offline PWA and WhatsApp** ⭐
   Done when: the app is installable; the sheets and issues a user opened recently work offline; issues, checklist answers and photos created offline sync when back online, with conflict notices; notifications can go out by WhatsApp (Cloud API, opt-in per user) as well as email.

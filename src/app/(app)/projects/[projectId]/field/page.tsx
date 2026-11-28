@@ -1,12 +1,6 @@
-import { ComingSoon } from "@/components/ComingSoon";
-import { getProjectContext } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
+/** Old link: Daily Logs moved to /daily-logs. */
 export default async function FieldPage({ params }: { params: Promise<{ projectId: string }> }) {
-  await getProjectContext((await params).projectId);
-  return (
-    <ComingSoon
-      title="Daily Logs"
-      items={["Daily Logs with weather, labour per company and subcontractor input"]}
-    />
-  );
+  redirect(`/projects/${(await params).projectId}/daily-logs`);
 }

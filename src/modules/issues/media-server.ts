@@ -38,15 +38,20 @@ export const canSeeChecklistPhotos = (ctx: IssuesContext) => can(ctx.member, "CH
 /** Plain project photos (not on an issue) can be added by Issues Creators or Document Control Creators. */
 export const canAddProjectPhotos = (ctx: IssuesContext) => ctx.canCreate || can(ctx.member, "DOCS", "create", ctx.grants);
 
-export type GalleryFilter = "all" | "issues" | "project" | "checklists";
+/** Photos on daily logs can be seen by anyone with Daily Logs access. */
+export const canSeeDailyLogPhotos = (ctx: IssuesContext) => can(ctx.member, "DAILY_LOGS", "view", ctx.grants);
+
+export type GalleryFilter = "all" | "issues" | "project" | "checklists" | "daily-logs";
 
 /** One page of the project gallery, newest first, holding only photos the member may see. */
 export async function galleryPage(ctx: IssuesContext, filter: GalleryFilter, page: number) {
   const issues = visibleIssueWhere(ctx);
   const onIssues: Prisma.PhotoWhereInput | null = issues ? { issueId: { not: null }, issue: issues } : null;
-  const project: Prisma.PhotoWhereInput | null = canSeeProjectPhotos(ctx) ? { issueId: null, checklistItemId: null } : null;
+  const project: Prisma.PhotoWhereInput | null = canSeeProjectPhotos(ctx) ? { issueId: null, checklistItemId: null, dailyLogId: null } : null;
   const onChecklists: Prisma.PhotoWhereInput | null = canSeeChecklistPhotos(ctx) ? { checklistItemId: { not: null } } : null;
-  const chosen = filter === "issues" ? [onIssues] : filter === "project" ? [project] : filter === "checklists" ? [onChecklists] : [onIssues, project, onChecklists];
+  const onLogs: Prisma.PhotoWhereInput | null = canSeeDailyLogPhotos(ctx) ? { dailyLogId: { not: null } } : null;
+  const chosen =
+    filter === "issues" ? [onIssues] : filter === "project" ? [project] : filter === "checklists" ? [onChecklists] : filter === "daily-logs" ? [onLogs] : [onIssues, project, onChecklists, onLogs];
   const parts = chosen.filter((x): x is Prisma.PhotoWhereInput => !!x);
   if (!parts.length) return { photos: [], more: false };
   const rows = await db.photo.findMany({
@@ -55,6 +60,7 @@ export async function galleryPage(ctx: IssuesContext, filter: GalleryFilter, pag
       uploadedBy: { select: { name: true } },
       issue: { select: { id: true, number: true, title: true } },
       checklistItem: { select: { checklist: { select: { id: true, number: true, title: true } } } },
+      dailyLog: { select: { date: true } },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * GALLERY_PAGE_SIZE,
@@ -74,6 +80,11 @@ export async function photoAccess(ctx: IssuesContext, photoId: string) {
   if (photo.checklistItem) {
     if (!canSeeChecklistPhotos(ctx)) return null;
     // checklist photos are removed from their checklist, never from the gallery
+    return { photo, manager: false };
+  }
+  if (photo.dailyLogId) {
+    if (!canSeeDailyLogPhotos(ctx)) return null;
+    // daily log photos are removed from their log, never from the gallery
     return { photo, manager: false };
   }
   if (photo.issue) {

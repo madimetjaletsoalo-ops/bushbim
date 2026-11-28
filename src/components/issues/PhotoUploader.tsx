@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { input, label } from "@/components/ui";
 import { formatBytes } from "@/modules/docs/logic";
 import { completeChecklistPhotoUpload, requestChecklistPhotoUploads } from "@/modules/checklists/media-actions";
+import { completeDailyLogPhotoUpload, requestDailyLogPhotoUploads } from "@/modules/daily-logs/media-actions";
 import { completePhotoUpload, requestPhotoUploads } from "@/modules/issues/media-actions";
 import { MAX_CAPTION, MAX_PHOTOS_PER_UPLOAD, PHOTO_MAX_WIDTH } from "@/modules/issues/media";
 import { compressPhoto, type Compressed } from "./compress";
@@ -30,12 +31,15 @@ export function PhotoUploader({
   projectId,
   issueId,
   checklistItem,
+  dailyLogId,
   label: buttonLabel = "Add photos",
 }: {
   projectId: string;
   issueId: string | null;
   /** answer a checklist photo item instead of adding to an issue */
   checklistItem?: { checklistId: string; itemId: string };
+  /** add to a daily log instead of an issue */
+  dailyLogId?: string;
   label?: string;
 }) {
   const router = useRouter();
@@ -69,7 +73,9 @@ export function PhotoUploader({
       const specs = done.map((d) => ({ name: d.file.name, size: d.c.photo.size, thumbSize: d.c.thumb.size }));
       const res = checklistItem
         ? await requestChecklistPhotoUploads(projectId, checklistItem.checklistId, checklistItem.itemId, specs)
-        : await requestPhotoUploads(projectId, issueId, specs);
+        : dailyLogId
+          ? await requestDailyLogPhotoUploads(projectId, dailyLogId, specs)
+          : await requestPhotoUploads(projectId, issueId, specs);
       if (!res.ok) {
         setError(res.error);
         for (const d of done) patch(d.row.id, { state: "error", note: "Not uploaded" });
@@ -82,7 +88,11 @@ export function PhotoUploader({
         try {
           await put(t.main.url, t.main.headers, c.photo);
           await put(t.thumb.url, t.thumb.headers, c.thumb);
-          const saved = checklistItem ? await completeChecklistPhotoUpload(projectId, t.token, caption) : await completePhotoUpload(projectId, t.token, caption);
+          const saved = checklistItem
+            ? await completeChecklistPhotoUpload(projectId, t.token, caption)
+            : dailyLogId
+              ? await completeDailyLogPhotoUpload(projectId, t.token, caption)
+              : await completePhotoUpload(projectId, t.token, caption);
           if (saved.ok) patch(row.id, { state: "done", note: `Saved, ${c.width}×${c.height}, ${formatBytes(c.photo.size)}` });
           else patch(row.id, { state: "error", note: saved.error });
         } catch (e) {
@@ -99,7 +109,7 @@ export function PhotoUploader({
     }
   }
 
-  const fieldId = `photo-input-${checklistItem?.itemId ?? issueId ?? "project"}`;
+  const fieldId = `photo-input-${checklistItem?.itemId ?? dailyLogId ?? issueId ?? "project"}`;
   return (
     <div className="space-y-2" data-testid="photo-uploader">
       <div>

@@ -158,7 +158,7 @@ export async function completePhotoUpload(projectId: string, token: string, capt
 export async function deletePhoto(projectId: string, photoId: string) {
   const ctx = await getIssuesContext(projectId);
   const found = await photoAccess(ctx, photoId);
-  if (!found || found.photo.checklistItemId || !canDeletePhoto(found.photo, ctx.user.id, found.manager)) return;
+  if (!found || found.photo.checklistItemId || found.photo.dailyLogId || !canDeletePhoto(found.photo, ctx.user.id, found.manager)) return;
   const { photo } = found;
   await db.$transaction([
     db.photo.delete({ where: { id: photo.id } }),
